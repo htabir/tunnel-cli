@@ -89,7 +89,7 @@ class APIClient:
             data["subdomain"] = subdomain
         
         async with self.session.post(
-            f"{self.api_url}/tunnels/",
+            f"{self.api_url}/cli/tunnels",
             headers=headers,
             json=data
         ) as response:
@@ -103,7 +103,7 @@ class APIClient:
         """Delete a tunnel"""
         headers = {"X-API-Key": self.api_key} if self.api_key else {}
         async with self.session.delete(
-            f"{self.api_url}/tunnels/{tunnel_id}",
+            f"{self.api_url}/cli/tunnels/{tunnel_id}",
             headers=headers
         ) as response:
             return response.status == 200
