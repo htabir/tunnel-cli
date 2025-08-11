@@ -318,6 +318,12 @@ class DashboardScreen(Screen):
         await self.load_tunnels()
         # Auto-connect tunnels with local ports
         await self.auto_connect_tunnels()
+        # Start periodic status sync
+        self.set_interval(30, self.periodic_sync)  # Sync every 30 seconds
+    
+    async def periodic_sync(self) -> None:
+        """Periodic sync of connection status"""
+        await self.sync_connection_status()
     
     async def load_tunnels(self) -> None:
         """Load and display tunnels"""
@@ -486,14 +492,35 @@ class DashboardScreen(Screen):
         
         for short_id, tunnel in self.tunnel_data.items():
             local_port = tunnel.get("local_port")
-            if local_port and await self._is_port_available(local_port):
-                tunnel_id = tunnel.get("id")
-                # Check if not already connected
-                if self.app.frp_client_manager.get_tunnel_status(tunnel_id) != "connected":
+            tunnel_id = tunnel.get("id")
+            
+            if local_port:
+                # Check port availability and connection status
+                port_available = await self._is_port_available(local_port)
+                current_status = self.app.frp_client_manager.get_tunnel_status(tunnel_id)
+                
+                if port_available and current_status != "connected":
+                    # Port is available but not connected - connect it
                     try:
                         await self.app.frp_client_manager.start_tunnel(tunnel, local_port)
+                        # Report connected status
+                        await self.app.api_client.update_connection_status(tunnel_id, "connected")
                     except:
                         pass  # Silently fail auto-connect
+                elif not port_available and current_status == "connected":
+                    # Port is down but we think we're connected - disconnect
+                    try:
+                        await self.app.frp_client_manager.stop_tunnel(tunnel_id)
+                        # Report port_down status
+                        await self.app.api_client.update_connection_status(tunnel_id, "port_down")
+                    except:
+                        pass
+                elif not port_available:
+                    # Port is down - report it
+                    try:
+                        await self.app.api_client.update_connection_status(tunnel_id, "port_down")
+                    except:
+                        pass
         
         # Refresh display to show connected status
         await self.load_tunnels()
@@ -502,6 +529,35 @@ class DashboardScreen(Screen):
         """Refresh tunnel list"""
         await self.load_tunnels()
         await self.auto_connect_tunnels()
+        await self.sync_connection_status()
+    
+    async def sync_connection_status(self) -> None:
+        """Sync connection status with backend"""
+        if not hasattr(self, 'tunnel_data'):
+            return
+        
+        for short_id, tunnel in self.tunnel_data.items():
+            tunnel_id = tunnel.get("id")
+            local_port = tunnel.get("local_port")
+            
+            if local_port:
+                # Check actual status
+                frp_status = self.app.frp_client_manager.get_tunnel_status(tunnel_id)
+                port_available = await self._is_port_available(local_port)
+                
+                # Determine real status
+                if frp_status == "connected" and port_available:
+                    status = "connected"
+                elif not port_available:
+                    status = "port_down"
+                else:
+                    status = "disconnected"
+                
+                # Report to backend
+                try:
+                    await self.app.api_client.update_connection_status(tunnel_id, status)
+                except:
+                    pass  # Silently fail status updates
     
     def action_logout(self) -> None:
         """Logout and return to login"""
