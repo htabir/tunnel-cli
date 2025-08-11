@@ -3,6 +3,8 @@ API Client for tunnel service
 """
 import aiohttp
 import json
+import ssl
+import certifi
 from typing import Optional, Dict, Any, List
 from pathlib import Path
 
@@ -14,7 +16,10 @@ class APIClient:
         self.session: Optional[aiohttp.ClientSession] = None
         
     async def __aenter__(self):
-        self.session = aiohttp.ClientSession()
+        # Create SSL context with certifi certificates (works on all platforms)
+        ssl_context = ssl.create_default_context(cafile=certifi.where())
+        connector = aiohttp.TCPConnector(ssl=ssl_context)
+        self.session = aiohttp.ClientSession(connector=connector)
         return self
         
     async def __aexit__(self, exc_type, exc_val, exc_tb):

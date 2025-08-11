@@ -316,13 +316,7 @@ class DashboardScreen(Screen):
         table.clear(columns=True)
         
         # Add columns
-        table.add_columns(
-            ("ID", 12),
-            ("Subdomain", 20),
-            ("Port", 8),
-            ("Status", 10),
-            ("URL", 40)
-        )
+        table.add_columns("ID", "Subdomain", "Port", "Status", "URL")
         
         try:
             tunnels = await self.app.api_client.list_tunnels()

@@ -36,6 +36,7 @@ setup(
         "aiohttp>=3.9.0",
         "requests>=2.31.0",
         "python-dotenv>=1.0.0",
+        "certifi>=2023.0.0",
     ],
     entry_points={
         "console_scripts": [
