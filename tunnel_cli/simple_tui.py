@@ -316,6 +316,8 @@ class DashboardScreen(Screen):
     async def on_mount(self) -> None:
         """Load tunnels when screen mounts"""
         await self.load_tunnels()
+        # Auto-connect tunnels with local ports
+        await self.auto_connect_tunnels()
     
     async def load_tunnels(self) -> None:
         """Load and display tunnels"""
@@ -323,7 +325,7 @@ class DashboardScreen(Screen):
         table.clear(columns=True)
         
         # Add columns
-        table.add_columns("ID", "Subdomain", "Port", "Status", "Connection", "URL")
+        table.add_columns("ID", "Subdomain", "Local", "Remote", "Status", "URL")
         
         # Store full tunnel data for later use
         self.tunnel_data = {}
@@ -338,22 +340,30 @@ class DashboardScreen(Screen):
                     # Store full tunnel data indexed by short ID
                     self.tunnel_data[short_id] = tunnel
                     
-                    # Check if tunnel is connected locally
-                    connection_status = frp_client_manager.get_tunnel_status(tunnel_id)
-                    if connection_status == "connected":
-                        connection_text = Text("● Connected", style="green")
-                    elif connection_status == "disconnected":
-                        connection_text = Text("○ Disconnected", style="red")
-                    else:
-                        connection_text = Text("○ Not started", style="dim")
+                    # Determine status based on local port and connection
+                    local_port = tunnel.get("local_port")
+                    local_port_str = str(local_port) if local_port else "-"
                     
-                    status_color = "green" if tunnel.get("status") == "active" else "yellow"
+                    # Check connection status
+                    connection_status = frp_client_manager.get_tunnel_status(tunnel_id)
+                    
+                    if connection_status == "connected":
+                        status_text = Text("● Connected", style="green")
+                    elif local_port:
+                        # Has local port but not connected - check if port is available
+                        if await self._is_port_available(local_port):
+                            status_text = Text("○ Ready", style="yellow")
+                        else:
+                            status_text = Text("○ Port down", style="red")
+                    else:
+                        status_text = Text("○ Manual", style="dim")
+                    
                     table.add_row(
                         short_id,
                         tunnel.get("subdomain", ""),
+                        local_port_str,
                         str(tunnel.get("remote_port", "")),
-                        Text(tunnel.get("status", ""), style=status_color),
-                        connection_text,
+                        status_text,
                         tunnel.get("url", "")
                     )
                 
@@ -365,7 +375,7 @@ class DashboardScreen(Screen):
                     "-",
                     "-",
                     "-",
-                    "Press 'N' to create your first tunnel"
+                    "Press 'N' to create"
                 )
         
         except Exception as e:
@@ -408,18 +418,40 @@ class DashboardScreen(Screen):
                 short_id = row[0]
                 tunnel_data = getattr(self, 'tunnel_data', {}).get(short_id)
                 if tunnel_data:
-                    # Check if already connected
                     tunnel_id = tunnel_data.get("id")
+                    local_port = tunnel_data.get("local_port")
+                    
+                    # Check if already connected
                     if frp_client_manager.get_tunnel_status(tunnel_id) == "connected":
                         # Disconnect
                         asyncio.create_task(self._disconnect_tunnel(tunnel_id))
+                    elif local_port:
+                        # Has local port - try to connect directly
+                        asyncio.create_task(self._connect_tunnel_with_port(tunnel_data, local_port))
                     else:
-                        # Show connect screen
+                        # No local port - show connect screen to get one
                         self.app.push_screen(ConnectTunnelScreen(tunnel_data))
                 else:
                     self.notify("Tunnel data not found", severity="error", timeout=2)
         else:
             self.notify("Please select a tunnel first", severity="warning", timeout=2)
+    
+    async def _connect_tunnel_with_port(self, tunnel_data: Dict[str, Any], local_port: int):
+        """Connect a tunnel with a known local port"""
+        try:
+            if not await self._is_port_available(local_port):
+                self.notify(f"Port {local_port} is not available", severity="warning", timeout=3)
+                return
+                
+            if not await frp_client_manager.ensure_frpc_installed():
+                self.notify("Failed to install FRP client", severity="error", timeout=3)
+                return
+                
+            await frp_client_manager.start_tunnel(tunnel_data, local_port)
+            self.notify(f"Tunnel connected to port {local_port}", severity="success", timeout=2)
+            await self.load_tunnels()
+        except Exception as e:
+            self.notify(f"Failed to connect: {str(e)}", severity="error", timeout=3)
     
     async def _disconnect_tunnel(self, tunnel_id: str):
         """Disconnect a tunnel"""
@@ -430,9 +462,46 @@ class DashboardScreen(Screen):
         except Exception as e:
             self.notify(f"Failed to disconnect: {str(e)}", severity="error", timeout=3)
     
+    async def _is_port_available(self, port: int) -> bool:
+        """Check if a local port is listening"""
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            result = sock.connect_ex(('127.0.0.1', port))
+            return result == 0  # Port is open if connect succeeds
+        finally:
+            sock.close()
+    
+    async def auto_connect_tunnels(self) -> None:
+        """Auto-connect tunnels that have local ports configured"""
+        if not hasattr(self, 'tunnel_data'):
+            return
+            
+        # Ensure FRP client is installed
+        try:
+            if not await frp_client_manager.ensure_frpc_installed():
+                return
+        except:
+            return
+        
+        for short_id, tunnel in self.tunnel_data.items():
+            local_port = tunnel.get("local_port")
+            if local_port and await self._is_port_available(local_port):
+                tunnel_id = tunnel.get("id")
+                # Check if not already connected
+                if frp_client_manager.get_tunnel_status(tunnel_id) != "connected":
+                    try:
+                        await frp_client_manager.start_tunnel(tunnel, local_port)
+                    except:
+                        pass  # Silently fail auto-connect
+        
+        # Refresh display to show connected status
+        await self.load_tunnels()
+    
     async def action_refresh(self) -> None:
         """Refresh tunnel list"""
         await self.load_tunnels()
+        await self.auto_connect_tunnels()
     
     def action_logout(self) -> None:
         """Logout and return to login"""
@@ -626,11 +695,38 @@ class CreateTunnelScreen(Screen):
                 local_port=port,
                 subdomain=subdomain if subdomain else None
             )
-            self.notify(
-                f"Tunnel created: {tunnel['full_url']}",
-                severity="success",
-                timeout=3
-            )
+            
+            # Auto-connect if port is available
+            if await self._is_port_available(port):
+                try:
+                    # Ensure FRP client is installed
+                    if await frp_client_manager.ensure_frpc_installed():
+                        # Start the tunnel
+                        await frp_client_manager.start_tunnel(tunnel, port)
+                        self.notify(
+                            f"Tunnel created and connected: {tunnel['full_url']}",
+                            severity="success",
+                            timeout=4
+                        )
+                    else:
+                        self.notify(
+                            f"Tunnel created: {tunnel['full_url']} (FRP client install failed)",
+                            severity="warning",
+                            timeout=4
+                        )
+                except Exception as conn_err:
+                    self.notify(
+                        f"Tunnel created but connection failed: {str(conn_err)}",
+                        severity="warning",
+                        timeout=4
+                    )
+            else:
+                self.notify(
+                    f"Tunnel created: {tunnel['full_url']} (Port {port} not available)",
+                    severity="info",
+                    timeout=4
+                )
+            
             # Refresh the dashboard before popping screen
             dashboard = self.app.get_screen("dashboard")
             if dashboard:
@@ -638,6 +734,16 @@ class CreateTunnelScreen(Screen):
             self.app.pop_screen()
         except Exception as e:
             self.notify(f"Failed to create tunnel: {str(e)}", severity="error", timeout=3)
+    
+    async def _is_port_available(self, port: int) -> bool:
+        """Check if a local port is listening"""
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            result = sock.connect_ex(('127.0.0.1', port))
+            return result == 0  # Port is open if connect succeeds
+        finally:
+            sock.close()
     
     @on(Button.Pressed, "#cancel")
     def handle_cancel(self, event: Button.Pressed = None) -> None:
