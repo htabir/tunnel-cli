@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tunnel-cli"
+version = "1.0.0"
+description = "Terminal User Interface for managing tunnels"
+readme = "README.md"
+authors = [
+    { name = "Tunnel Team", email = "support@tunnel.ovream.com" }
+]
+license = { text = "MIT" }
+requires-python = ">=3.7"
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "textual>=0.47.0",
+    "aiohttp>=3.9.0",
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://tunnel.ovream.com"
+Documentation = "https://docs.tunnel.ovream.com"
+Repository = "https://github.com/tunnel/tunnel-cli"
+Issues = "https://github.com/tunnel/tunnel-cli/issues"
+
+[project.scripts]
+tunnel = "tunnel_cli.__main__:main"
+
+[tool.setuptools]
+packages = ["tunnel_cli"]
+
+[tool.setuptools.package-data]
+tunnel_cli = ["*.txt", "*.md"]
