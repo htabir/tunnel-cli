@@ -544,20 +544,21 @@ class CreateTunnelScreen(Screen):
     
     #create-panel {
         width: 60;
-        height: auto;
+        height: 25;
         padding: 2;
         border: solid $primary;
     }
     
     #button-container {
-        margin-top: 1;
+        margin-top: 2;
         height: 3;
         align: center middle;
     }
     
-    #button-container Button {
+    Button {
         margin: 0 1;
         min-width: 12;
+        height: 3;
     }
     """
     
@@ -572,11 +573,13 @@ class CreateTunnelScreen(Screen):
         
         with Center():
             with Middle():
-                with Container(id="create-panel"):
-                    yield Static("[bold cyan]═══ Create New Tunnel ═══[/bold cyan]\n")
+                with Vertical(id="create-panel"):
+                    yield Static("[bold cyan]═══ Create New Tunnel ═══[/bold cyan]")
+                    yield Static("")
                     yield Static(
-                        "[dim]Create a secure tunnel to expose your local service[/dim]\n"
+                        "[dim]Create a secure tunnel to expose your local service[/dim]"
                     )
+                    yield Static("")
                     
                     yield Label("Local Port:")
                     yield Input(
@@ -585,8 +588,9 @@ class CreateTunnelScreen(Screen):
                         value="80"
                     )
                     yield Static(
-                        "[dim]The port your local application is running on[/dim]\n"
+                        "[dim]The port your local application is running on[/dim]"
                     )
+                    yield Static("")
                     
                     yield Label("Subdomain (optional):")
                     yield Input(
@@ -594,19 +598,18 @@ class CreateTunnelScreen(Screen):
                         id="subdomain"
                     )
                     yield Static(
-                        "[dim]Leave empty for a random subdomain\n"
-                        "Your tunnel will be: [blue].tunnel.ovream.com[/blue][/dim]\n"
+                        "[dim]Leave empty for a random subdomain[/dim]"
                     )
-                    
-                    # Add some space before buttons
-                    yield Static("\n")
-                    
-                    # Button container
-                    yield Horizontal(
-                        Button("Create Tunnel", variant="primary", id="create"),
-                        Button("Cancel", variant="default", id="cancel"),
-                        id="button-container"
+                    yield Static(
+                        "[dim]Your tunnel will be: [blue].tunnel.ovream.com[/blue][/dim]"
                     )
+                    yield Static("")
+                    yield Static("")
+                    
+                    # Create buttons directly
+                    with Horizontal(id="button-container", classes="button-row"):
+                        yield Button("Create Tunnel", variant="primary", id="create", classes="create-button")
+                        yield Button("Cancel", variant="default", id="cancel", classes="cancel-button")
         
         yield Footer()
     
