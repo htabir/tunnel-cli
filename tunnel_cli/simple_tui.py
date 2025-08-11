@@ -26,6 +26,7 @@ from rich.text import Text
 from .api_client import APIClient
 from .config_manager import ConfigManager
 from .auth_server import AuthServer
+from .frp_client import frp_client_manager
 
 
 class LoginScreen(Screen):
@@ -322,7 +323,7 @@ class DashboardScreen(Screen):
         table.clear(columns=True)
         
         # Add columns
-        table.add_columns("ID", "Subdomain", "Port", "Status", "URL")
+        table.add_columns("ID", "Subdomain", "Port", "Status", "Connection", "URL")
         
         # Store full tunnel data for later use
         self.tunnel_data = {}
@@ -337,12 +338,22 @@ class DashboardScreen(Screen):
                     # Store full tunnel data indexed by short ID
                     self.tunnel_data[short_id] = tunnel
                     
+                    # Check if tunnel is connected locally
+                    connection_status = frp_client_manager.get_tunnel_status(tunnel_id)
+                    if connection_status == "connected":
+                        connection_text = Text("● Connected", style="green")
+                    elif connection_status == "disconnected":
+                        connection_text = Text("○ Disconnected", style="red")
+                    else:
+                        connection_text = Text("○ Not started", style="dim")
+                    
                     status_color = "green" if tunnel.get("status") == "active" else "yellow"
                     table.add_row(
                         short_id,
                         tunnel.get("subdomain", ""),
                         str(tunnel.get("remote_port", "")),
                         Text(tunnel.get("status", ""), style=status_color),
+                        connection_text,
                         tunnel.get("url", "")
                     )
                 
@@ -353,12 +364,13 @@ class DashboardScreen(Screen):
                     "No tunnels yet",
                     "-",
                     "-",
+                    "-",
                     "Press 'N' to create your first tunnel"
                 )
         
         except Exception as e:
             self.notify(f"Failed to load tunnels: {str(e)}", severity="error", timeout=3)
-            table.add_row("-", "Error loading", "-", "-", str(e)[:40])
+            table.add_row("-", "Error loading", "-", "-", "-", str(e)[:40])
     
     def action_new_tunnel(self) -> None:
         """Create new tunnel"""
@@ -387,7 +399,7 @@ class DashboardScreen(Screen):
         else:
             self.notify("Please select a tunnel first", severity="warning", timeout=2)
     
-    async def action_connect_tunnel(self) -> None:
+    def action_connect_tunnel(self) -> None:
         """Connect to selected tunnel"""
         table = self.query_one("#tunnels-table", DataTable)
         if table.cursor_row is not None and table.cursor_row >= 0:
@@ -396,12 +408,27 @@ class DashboardScreen(Screen):
                 short_id = row[0]
                 tunnel_data = getattr(self, 'tunnel_data', {}).get(short_id)
                 if tunnel_data:
-                    # TODO: Implement FRP client connection
-                    self.notify(f"Connect feature coming soon for {tunnel_data.get('subdomain')}", severity="information", timeout=3)
+                    # Check if already connected
+                    tunnel_id = tunnel_data.get("id")
+                    if frp_client_manager.get_tunnel_status(tunnel_id) == "connected":
+                        # Disconnect
+                        asyncio.create_task(self._disconnect_tunnel(tunnel_id))
+                    else:
+                        # Show connect screen
+                        self.app.push_screen(ConnectTunnelScreen(tunnel_data))
                 else:
                     self.notify("Tunnel data not found", severity="error", timeout=2)
         else:
             self.notify("Please select a tunnel first", severity="warning", timeout=2)
+    
+    async def _disconnect_tunnel(self, tunnel_id: str):
+        """Disconnect a tunnel"""
+        try:
+            await frp_client_manager.stop_tunnel(tunnel_id)
+            self.notify("Tunnel disconnected", severity="success", timeout=2)
+            await self.load_tunnels()
+        except Exception as e:
+            self.notify(f"Failed to disconnect: {str(e)}", severity="error", timeout=3)
     
     async def action_refresh(self) -> None:
         """Refresh tunnel list"""
@@ -415,6 +442,111 @@ class DashboardScreen(Screen):
     def action_quit(self) -> None:
         """Quit application"""
         self.app.exit()
+
+
+class ConnectTunnelScreen(Screen):
+    """Screen for connecting a tunnel to a local port"""
+    
+    CSS = """
+    ConnectTunnelScreen {
+        align: center middle;
+    }
+    
+    #connect-panel {
+        width: 60;
+        padding: 2;
+    }
+    """
+    
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel", show=True),
+        Binding("enter", "connect", "Connect", show=True),
+    ]
+    
+    def __init__(self, tunnel_data: Dict[str, Any]):
+        super().__init__()
+        self.tunnel_data = tunnel_data
+    
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        
+        with Center():
+            with Middle():
+                with Container(id="connect-panel"):
+                    yield Static(f"[bold cyan]═══ Connect Tunnel ═══[/bold cyan]\n")
+                    yield Static(
+                        f"[bold]Tunnel:[/bold] {self.tunnel_data.get('subdomain')}.tunnel.ovream.com\n"
+                        f"[bold]Remote Port:[/bold] {self.tunnel_data.get('remote_port')}\n"
+                    )
+                    yield Static("─" * 50, classes="dim")
+                    
+                    yield Label("Local Port:")
+                    yield Input(
+                        placeholder="e.g., 3000, 8080, 5000",
+                        id="local-port",
+                        value="3000"
+                    )
+                    yield Static(
+                        "[dim]Enter the local port your application is running on[/dim]\n"
+                    )
+                    
+                    with Horizontal():
+                        yield Button("Connect [Enter]", variant="primary", id="connect")
+                        yield Button("Cancel [Esc]", variant="default", id="cancel")
+        
+        yield Footer()
+    
+    @on(Button.Pressed, "#connect")
+    async def handle_connect(self, event: Button.Pressed = None) -> None:
+        """Connect the tunnel"""
+        port_str = self.query_one("#local-port").value
+        
+        try:
+            local_port = int(port_str)
+            if local_port < 1 or local_port > 65535:
+                raise ValueError("Port must be between 1 and 65535")
+        except ValueError as e:
+            self.notify(str(e), severity="error", timeout=2)
+            return
+        
+        self.notify("Connecting tunnel...", severity="information", timeout=2)
+        
+        try:
+            # Ensure FRP client is installed
+            if not await frp_client_manager.ensure_frpc_installed():
+                self.notify("Failed to install FRP client", severity="error", timeout=3)
+                return
+            
+            # Start the tunnel
+            await frp_client_manager.start_tunnel(self.tunnel_data, local_port)
+            self.notify(
+                f"Tunnel connected! Your app is available at https://{self.tunnel_data.get('subdomain')}.tunnel.ovream.com",
+                severity="success",
+                timeout=5
+            )
+            
+            # Update dashboard
+            dashboard = self.app.get_screen("dashboard")
+            if dashboard:
+                await dashboard.load_tunnels()
+            
+            self.app.pop_screen()
+            
+        except Exception as e:
+            self.notify(f"Failed to connect tunnel: {str(e)}", severity="error", timeout=3)
+    
+    @on(Button.Pressed, "#cancel")
+    def handle_cancel(self, event: Button.Pressed = None) -> None:
+        """Cancel and go back"""
+        self.app.pop_screen()
+    
+    async def action_connect(self) -> None:
+        """Keyboard shortcut for connect"""
+        await self.handle_connect(None)
+    
+    def action_cancel(self) -> None:
+        """Keyboard shortcut for cancel"""
+        self.app.pop_screen()
 
 
 class CreateTunnelScreen(Screen):
@@ -581,6 +713,9 @@ class TunnelApp(App):
     
     async def on_shutdown(self) -> None:
         """Cleanup on shutdown"""
+        # Stop all running tunnels
+        await frp_client_manager.stop_all_tunnels()
+        # Close API client
         await self.api_client.__aexit__(None, None, None)
 
 
