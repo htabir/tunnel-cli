@@ -281,6 +281,7 @@ class DashboardScreen(Screen):
     
     BINDINGS = [
         Binding("n", "new_tunnel", "New Tunnel", show=True),
+        Binding("e", "edit_tunnel", "Edit Port", show=True),
         Binding("d", "delete_tunnel", "Delete", show=True),
         Binding("r", "refresh", "Refresh", show=True),
         Binding("l", "logout", "Logout", show=True),
@@ -414,7 +415,20 @@ class DashboardScreen(Screen):
         else:
             self.notify("Please select a tunnel first", severity="warning", timeout=2)
     
-    # Removed connect_tunnel action - auto-connect handles this now
+    async def action_edit_tunnel(self) -> None:
+        """Edit local port for selected tunnel"""
+        table = self.query_one("#tunnels-table", DataTable)
+        if table.cursor_row is not None and table.cursor_row >= 0:
+            row = table.get_row_at(table.cursor_row)
+            if row and row[0] != "-":
+                short_id = row[0]
+                tunnel_data = getattr(self, 'tunnel_data', {}).get(short_id)
+                if tunnel_data:
+                    self.app.push_screen(EditTunnelPortScreen(tunnel_data))
+                else:
+                    self.notify("Tunnel data not found", severity="error", timeout=2)
+        else:
+            self.notify("Please select a tunnel first", severity="warning", timeout=2)
     
     async def _is_port_available(self, port: int) -> bool:
         """Check if a local port is listening"""
