@@ -378,9 +378,26 @@ class DashboardScreen(Screen):
                     try:
                         await self.app.api_client.delete_tunnel(full_tunnel_id)
                         self.notify("Tunnel deleted", severity="success", timeout=2)
+                        # Refresh the tunnels list immediately
                         await self.load_tunnels()
                     except Exception as e:
                         self.notify(f"Failed to delete: {str(e)}", severity="error", timeout=3)
+                else:
+                    self.notify("Tunnel data not found", severity="error", timeout=2)
+        else:
+            self.notify("Please select a tunnel first", severity="warning", timeout=2)
+    
+    async def action_connect_tunnel(self) -> None:
+        """Connect to selected tunnel"""
+        table = self.query_one("#tunnels-table", DataTable)
+        if table.cursor_row is not None and table.cursor_row >= 0:
+            row = table.get_row_at(table.cursor_row)
+            if row and row[0] != "-":
+                short_id = row[0]
+                tunnel_data = getattr(self, 'tunnel_data', {}).get(short_id)
+                if tunnel_data:
+                    # TODO: Implement FRP client connection
+                    self.notify(f"Connect feature coming soon for {tunnel_data.get('subdomain')}", severity="information", timeout=3)
                 else:
                     self.notify("Tunnel data not found", severity="error", timeout=2)
         else:
@@ -482,6 +499,10 @@ class CreateTunnelScreen(Screen):
                 severity="success",
                 timeout=3
             )
+            # Refresh the dashboard before popping screen
+            dashboard = self.app.get_screen("dashboard")
+            if dashboard:
+                await dashboard.load_tunnels()
             self.app.pop_screen()
         except Exception as e:
             self.notify(f"Failed to create tunnel: {str(e)}", severity="error", timeout=3)
