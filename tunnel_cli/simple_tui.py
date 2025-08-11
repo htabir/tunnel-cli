@@ -318,14 +318,22 @@ class DashboardScreen(Screen):
         # Add columns
         table.add_columns("ID", "Subdomain", "Port", "Status", "URL")
         
+        # Store full tunnel data for later use
+        self.tunnel_data = {}
+        
         try:
             tunnels = await self.app.api_client.list_tunnels()
             
             if tunnels:
                 for tunnel in tunnels:
+                    tunnel_id = tunnel.get("id", "")
+                    short_id = tunnel_id[:8]
+                    # Store full tunnel data indexed by short ID
+                    self.tunnel_data[short_id] = tunnel
+                    
                     status_color = "green" if tunnel.get("status") == "active" else "yellow"
                     table.add_row(
-                        tunnel.get("id", "")[:8],
+                        short_id,
                         tunnel.get("subdomain", ""),
                         str(tunnel.get("remote_port", "")),
                         Text(tunnel.get("status", ""), style=status_color),
@@ -356,13 +364,19 @@ class DashboardScreen(Screen):
         if table.cursor_row is not None and table.cursor_row >= 0:
             row = table.get_row_at(table.cursor_row)
             if row and row[0] != "-":
-                tunnel_id = row[0]
-                try:
-                    await self.app.api_client.delete_tunnel(tunnel_id)
-                    self.notify("Tunnel deleted", severity="success")
-                    await self.load_tunnels()
-                except Exception as e:
-                    self.notify(f"Failed to delete: {str(e)}", severity="error")
+                short_id = row[0]
+                # Get the full tunnel data using the short ID
+                tunnel_data = getattr(self, 'tunnel_data', {}).get(short_id)
+                if tunnel_data:
+                    full_tunnel_id = tunnel_data.get("id")
+                    try:
+                        await self.app.api_client.delete_tunnel(full_tunnel_id)
+                        self.notify("Tunnel deleted", severity="success")
+                        await self.load_tunnels()
+                    except Exception as e:
+                        self.notify(f"Failed to delete: {str(e)}", severity="error")
+                else:
+                    self.notify("Tunnel data not found", severity="error")
         else:
             self.notify("Please select a tunnel first", severity="warning")
     
