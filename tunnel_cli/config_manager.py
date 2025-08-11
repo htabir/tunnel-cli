@@ -62,7 +62,7 @@ class ConfigManager:
     
     @property
     def api_url(self) -> str:
-        return self.get("api_url", "https://api.tunnel.ovream.com/api/v1")
+        return self.get("api_url", "https://tunnel.ovream.com/api/v1")
     
     @api_url.setter
     def api_url(self, value: str):

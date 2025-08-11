@@ -16,11 +16,12 @@ from textual.containers import Container, Horizontal, Vertical, ScrollableContai
 from textual.screen import Screen
 from textual.widgets import (
     Header, Footer, Button, Input, Label, DataTable, Static, 
-    LoadingIndicator, RichLog, Rule, Panel
+    LoadingIndicator, RichLog
 )
+from textual.events import Key
 from textual.message import Message
 from rich.text import Text
-from rich.panel import Panel as RichPanel
+# Panel is not used anymore
 
 from .api_client import APIClient
 from .config_manager import ConfigManager
@@ -53,8 +54,16 @@ class LoginScreen(Screen):
         margin: 1 0;
     }
     
+    .hidden {
+        display: none;
+    }
+    
     Button {
         margin: 0 1;
+    }
+    
+    Input {
+        width: 100%;
     }
     """
     
@@ -73,7 +82,7 @@ class LoginScreen(Screen):
                         "[bold cyan]🚀 Tunnel CLI Authentication[/bold cyan]\n",
                         classes="title"
                     )
-                    yield Rule()
+                    yield Static("─" * 50)
                     
                     # Help text
                     yield Static(
@@ -84,7 +93,7 @@ class LoginScreen(Screen):
                         classes="help-text"
                     )
                     
-                    yield Rule(style="dim")
+                    yield Static("─" * 50, classes="dim")
                     
                     # Option 1: Browser Auth
                     yield Static("\n[green]Option 1: Browser Authentication[/green] [dim](Recommended)[/dim]")
@@ -107,7 +116,7 @@ class LoginScreen(Screen):
                         classes="help-text"
                     )
                     
-                    yield Rule(style="dim")
+                    yield Static("─" * 50, classes="dim")
                     
                     # API Key input (hidden initially)
                     yield Label("\nAPI Key:", id="api-label", classes="hidden")
@@ -140,64 +149,67 @@ class LoginScreen(Screen):
         yield Footer()
     
     @on(Button.Pressed, "#browser")
-    async def handle_browser_auth(self, event: Button.Pressed) -> None:
+    async def handle_browser_auth(self, event: Button.Pressed = None) -> None:
         """Start browser authentication flow"""
         import webbrowser
         
-        # Create a rich log for status updates
-        log_widget = RichLog(id="status-log", highlight=True, markup=True)
-        container = self.query_one("#login-panel")
-        container.mount(log_widget)
-        
-        log_widget.write("[yellow]Starting authentication server...[/yellow]")
+        self.notify("Starting browser authentication...", severity="information")
         
         auth_server = AuthServer()
         try:
             await auth_server.start()
             auth_url = auth_server.get_auth_url()
             
-            log_widget.write(f"[green]✓ Server started[/green]")
-            log_widget.write(f"[cyan]Opening browser to:[/cyan] {auth_url}")
-            
+            self.notify(f"Opening browser...")
             webbrowser.open(auth_url)
             
-            log_widget.write("[yellow]Waiting for authentication (2 minute timeout)...[/yellow]")
-            log_widget.write("[dim]Please complete login in your browser[/dim]")
+            self.notify("Waiting for authentication (2 minute timeout)...")
             
             api_key = await auth_server.wait_for_auth(timeout=120)
             
             if api_key:
-                log_widget.write("[green]✓ API key received![/green]")
+                self.notify("API key received!", severity="success")
                 await self.authenticate_with_key(api_key)
             else:
-                log_widget.write("[red]✗ Authentication timeout[/red]")
-                log_widget.write("[yellow]Please try manual authentication instead[/yellow]")
+                self.notify("Authentication timeout. Please try manual method.", severity="warning")
         
         except Exception as e:
-            log_widget.write(f"[red]Error: {str(e)}[/red]")
+            self.notify(f"Error: {str(e)}", severity="error")
         
         finally:
             await auth_server.stop()
     
     @on(Button.Pressed, "#manual")
-    def handle_manual_auth(self, event: Button.Pressed) -> None:
+    def handle_manual_auth(self, event: Button.Pressed = None) -> None:
         """Show manual API key input"""
         # Show the input fields
-        self.query_one("#api-label").remove_class("hidden")
-        self.query_one("#api-key").remove_class("hidden")
-        self.query_one("#api-key").focus()
+        api_label = self.query_one("#api-label", Label)
+        api_input = self.query_one("#api-key", Input)
         
-        # Add authenticate button
-        if not self.query_one("#button-group").query("#authenticate"):
+        # Remove hidden class if they have it
+        if "hidden" in api_label.classes:
+            api_label.remove_class("hidden")
+        if "hidden" in api_input.classes:
+            api_input.remove_class("hidden")
+        
+        # Focus the input
+        api_input.focus()
+        
+        # Add authenticate button if not already there
+        button_group = self.query_one("#button-group")
+        if not button_group.query("#authenticate"):
             auth_btn = Button(
                 "✓ Authenticate [Enter]",
                 variant="primary",
                 id="authenticate"
             )
-            self.query_one("#button-group").mount(auth_btn, before=2)
+            # Mount before the quit button (last one)
+            buttons = list(button_group.query(Button))
+            if buttons:
+                button_group.mount(auth_btn, before=buttons[-1])
     
     @on(Button.Pressed, "#authenticate")
-    async def handle_authenticate(self, event: Button.Pressed) -> None:
+    async def handle_authenticate(self, event: Button.Pressed = None) -> None:
         """Authenticate with provided API key"""
         api_key = self.query_one("#api-key").value.strip()
         
@@ -222,21 +234,26 @@ class LoginScreen(Screen):
             self.notify(f"Authentication failed: {str(e)}", severity="error")
     
     @on(Button.Pressed, "#quit")
-    def handle_quit(self, event: Button.Pressed) -> None:
+    def handle_quit(self, event: Button.Pressed = None) -> None:
         """Quit the application"""
         self.app.exit()
     
-    def action_browser_auth(self) -> None:
+    async def action_browser_auth(self) -> None:
         """Keyboard shortcut for browser auth"""
-        self.query_one("#browser").press()
+        await self.handle_browser_auth(None)
     
     def action_manual_auth(self) -> None:
         """Keyboard shortcut for manual auth"""
-        self.query_one("#manual").press()
+        self.handle_manual_auth(None)
     
     def action_quit(self) -> None:
         """Keyboard shortcut for quit"""
         self.app.exit()
+    
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter key in input field"""
+        if event.input.id == "api-key":
+            await self.handle_authenticate(None)
 
 
 class DashboardScreen(Screen):
@@ -275,13 +292,16 @@ class DashboardScreen(Screen):
         
         with Vertical():
             # User info and stats
-            with Panel(title="Dashboard", border_style="cyan", id="stats-panel"):
+            with Container(id="stats-panel"):
+                yield Static("[bold cyan]═══ Dashboard ═══[/bold cyan]")
                 yield Static(f"[bold]User:[/bold] {self.app.config.username}")
                 yield Static(f"[bold]Server:[/bold] tunnel.ovream.com")
                 yield Static(f"[bold]Status:[/bold] [green]Connected[/green]")
+                yield Static("─" * 50, classes="dim")
             
             # Tunnels table
-            with Panel(title="Your Tunnels", border_style="green", id="tunnels-panel"):
+            with Container(id="tunnels-panel"):
+                yield Static("[bold green]═══ Your Tunnels ═══[/bold green]")
                 yield DataTable(id="tunnels-table", cursor_type="row")
         
         yield Footer()
@@ -390,7 +410,8 @@ class CreateTunnelScreen(Screen):
         
         with Center():
             with Middle():
-                with Panel(title="Create New Tunnel", border_style="cyan", id="create-panel"):
+                with Container(id="create-panel"):
+                    yield Static("[bold cyan]═══ Create New Tunnel ═══[/bold cyan]\n")
                     yield Static(
                         "[dim]Create a secure tunnel to expose your local service[/dim]\n"
                     )
@@ -422,7 +443,7 @@ class CreateTunnelScreen(Screen):
         yield Footer()
     
     @on(Button.Pressed, "#create")
-    async def handle_create(self, event: Button.Pressed) -> None:
+    async def handle_create(self, event: Button.Pressed = None) -> None:
         """Create the tunnel"""
         port_str = self.query_one("#port").value
         subdomain = self.query_one("#subdomain").value.strip()
@@ -451,13 +472,13 @@ class CreateTunnelScreen(Screen):
             self.notify(f"Failed to create tunnel: {str(e)}", severity="error")
     
     @on(Button.Pressed, "#cancel")
-    def handle_cancel(self, event: Button.Pressed) -> None:
+    def handle_cancel(self, event: Button.Pressed = None) -> None:
         """Cancel and go back"""
         self.app.pop_screen()
     
-    def action_create(self) -> None:
+    async def action_create(self) -> None:
         """Keyboard shortcut for create"""
-        self.query_one("#create").press()
+        await self.handle_create(None)
     
     def action_cancel(self) -> None:
         """Keyboard shortcut for cancel"""

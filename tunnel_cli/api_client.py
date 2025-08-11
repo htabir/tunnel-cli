@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 class APIClient:
-    def __init__(self, api_url: str = "https://api.tunnel.ovream.com/api/v1"):
+    def __init__(self, api_url: str = "https://tunnel.ovream.com/api/v1"):
         self.api_url = api_url
         self.api_key: Optional[str] = None
         self.session: Optional[aiohttp.ClientSession] = None
