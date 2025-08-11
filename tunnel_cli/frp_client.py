@@ -14,6 +14,8 @@ import aiohttp
 import zipfile
 import tarfile
 import shutil
+import ssl
+import certifi
 
 
 class FRPClientManager:
@@ -72,8 +74,11 @@ class FRPClientManager:
         url = f"{base_url}/{filename}"
         
         try:
-            # Download FRP
-            async with aiohttp.ClientSession() as session:
+            # Download FRP with SSL certificate verification
+            ssl_context = ssl.create_default_context(cafile=certifi.where())
+            connector = aiohttp.TCPConnector(ssl=ssl_context)
+            
+            async with aiohttp.ClientSession(connector=connector) as session:
                 async with session.get(url) as response:
                     if response.status != 200:
                         raise Exception(f"Failed to download FRP: {response.status}")
