@@ -9,7 +9,7 @@ import os
 def main():
     """Main entry point for the tunnel command"""
     # Import here to avoid circular imports
-    from .tunnel_tui import TunnelApp
+    from .simple_tui import TunnelApp
     
     # Allow custom API URL via environment variable or argument
     if len(sys.argv) > 1:
