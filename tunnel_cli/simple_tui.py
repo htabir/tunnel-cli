@@ -546,6 +546,25 @@ class CreateTunnelScreen(Screen):
         width: 60;
         padding: 2;
     }
+    
+    #button-container {
+        margin-top: 2;
+        height: 3;
+    }
+    
+    #button-container Button {
+        margin: 0 1;
+    }
+    
+    #create {
+        background: $primary;
+        color: $text;
+    }
+    
+    #cancel {
+        background: $surface;
+        color: $text;
+    }
     """
     
     BINDINGS = [
@@ -584,9 +603,12 @@ class CreateTunnelScreen(Screen):
                         "Your tunnel will be: [subdomain].tunnel.ovream.com[/dim]\n"
                     )
                     
-                    with Horizontal():
-                        yield Button("Create [Enter]", variant="primary", id="create")
-                        yield Button("Cancel [Esc]", variant="default", id="cancel")
+                    # Add spacing before buttons
+                    yield Static("")
+                    
+                    with Horizontal(id="button-container"):
+                        yield Button("Create Tunnel", variant="primary", id="create")
+                        yield Button("Cancel", variant="default", id="cancel")
         
         yield Footer()
     
@@ -675,6 +697,138 @@ class CreateTunnelScreen(Screen):
         self.app.pop_screen()
 
 
+class EditTunnelPortScreen(Screen):
+    """Edit tunnel local port screen"""
+    
+    CSS = """
+    EditTunnelPortScreen {
+        align: center middle;
+    }
+    
+    #edit-panel {
+        width: 60;
+        padding: 2;
+    }
+    
+    #button-container {
+        margin-top: 2;
+        height: 3;
+    }
+    
+    #button-container Button {
+        margin: 0 1;
+    }
+    """
+    
+    BINDINGS = [
+        Binding("escape", "cancel", "Cancel", show=True),
+        Binding("enter", "save", "Save", show=True),
+    ]
+    
+    def __init__(self, tunnel_data: dict):
+        super().__init__()
+        self.tunnel_data = tunnel_data
+        self.tunnel_id = tunnel_data.get("id")
+        self.subdomain = tunnel_data.get("subdomain")
+        self.current_port = tunnel_data.get("local_port")
+    
+    def compose(self) -> ComposeResult:
+        yield Header(show_clock=True)
+        
+        with Center():
+            with Middle():
+                with Container(id="edit-panel"):
+                    yield Static(f"[bold cyan]═══ Edit Tunnel Port ═══[/bold cyan]\n")
+                    yield Static(f"[dim]Tunnel: {self.subdomain}.tunnel.ovream.com[/dim]\n")
+                    
+                    yield Label("Local Port:")
+                    yield Input(
+                        placeholder="e.g., 3000, 8080, 5000",
+                        id="port",
+                        value=str(self.current_port) if self.current_port else ""
+                    )
+                    yield Static(
+                        "[dim]Enter the local port for this tunnel\n"
+                        "Leave empty to disconnect[/dim]\n"
+                    )
+                    
+                    # Add spacing before buttons
+                    yield Static("")
+                    
+                    with Horizontal(id="button-container"):
+                        yield Button("Save", variant="primary", id="save")
+                        yield Button("Cancel", variant="default", id="cancel")
+        
+        yield Footer()
+    
+    @on(Button.Pressed, "#save")
+    async def handle_save(self, event: Button.Pressed = None) -> None:
+        """Save the port change"""
+        port_str = self.query_one("#port").value.strip()
+        
+        if port_str:
+            try:
+                port = int(port_str)
+                if port < 1 or port > 65535:
+                    raise ValueError("Port must be between 1 and 65535")
+            except ValueError as e:
+                self.notify(str(e), severity="error", timeout=2)
+                return
+        else:
+            port = None
+        
+        try:
+            # Update the tunnel's local port
+            await self.app.api_client.update_tunnel_port(self.tunnel_id, port)
+            
+            # If port was set, try to connect
+            if port:
+                if await self._is_port_available(port):
+                    try:
+                        await self.app.frp_client_manager.start_tunnel(self.tunnel_data, port)
+                        self.notify(f"Port updated and tunnel connected", severity="success", timeout=2)
+                    except:
+                        self.notify(f"Port updated but connection failed", severity="warning", timeout=2)
+                else:
+                    self.notify(f"Port updated (not available yet)", severity="info", timeout=2)
+            else:
+                # Stop the tunnel if it was running
+                await self.app.frp_client_manager.stop_tunnel(self.tunnel_id)
+                self.notify("Tunnel disconnected", severity="info", timeout=2)
+            
+            # Refresh dashboard
+            dashboard = self.app.get_screen("dashboard")
+            if dashboard:
+                await dashboard.load_tunnels()
+            
+            self.app.pop_screen()
+        except Exception as e:
+            self.notify(f"Failed to update port: {str(e)}", severity="error", timeout=3)
+    
+    async def _is_port_available(self, port: int) -> bool:
+        """Check if a local port is listening"""
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            result = sock.connect_ex(('127.0.0.1', port))
+            return result == 0
+        finally:
+            sock.close()
+    
+    @on(Button.Pressed, "#cancel")
+    def handle_cancel(self, event: Button.Pressed = None) -> None:
+        """Cancel and go back"""
+        self.app.pop_screen()
+    
+    async def action_save(self) -> None:
+        """Keyboard shortcut for save"""
+        await self.handle_save(None)
+    
+    def action_cancel(self) -> None:
+        """Keyboard shortcut for cancel"""
+        self.app.pop_screen()
+
+
 class TunnelApp(App):
     """Enhanced Tunnel CLI Application"""
     
@@ -691,6 +845,7 @@ class TunnelApp(App):
         "login": LoginScreen,
         "dashboard": DashboardScreen,
         "create_tunnel": CreateTunnelScreen,
+        "edit_tunnel_port": EditTunnelPortScreen,
     }
     
     def __init__(self):
