@@ -544,32 +544,27 @@ class CreateTunnelScreen(Screen):
     
     #create-panel {
         width: 60;
+        height: auto;
         padding: 2;
+        border: solid $primary;
     }
     
     #button-container {
-        margin-top: 2;
+        margin-top: 1;
         height: 3;
+        align: center middle;
     }
     
     #button-container Button {
         margin: 0 1;
-    }
-    
-    #create {
-        background: $primary;
-        color: $text;
-    }
-    
-    #cancel {
-        background: $surface;
-        color: $text;
+        min-width: 12;
     }
     """
     
     BINDINGS = [
         Binding("escape", "cancel", "Cancel", show=True),
-        Binding("enter", "create", "Create", show=True),
+        Binding("enter", "create", "Create", show=False),
+        Binding("p", "palette", "Palette", show=True),
     ]
     
     def compose(self) -> ComposeResult:
@@ -585,9 +580,9 @@ class CreateTunnelScreen(Screen):
                     
                     yield Label("Local Port:")
                     yield Input(
-                        placeholder="e.g., 3000, 8080, 5000",
+                        placeholder="80",
                         id="port",
-                        value="3000"
+                        value="80"
                     )
                     yield Static(
                         "[dim]The port your local application is running on[/dim]\n"
@@ -595,20 +590,23 @@ class CreateTunnelScreen(Screen):
                     
                     yield Label("Subdomain (optional):")
                     yield Input(
-                        placeholder="e.g., my-app, test-server",
+                        placeholder="eighty",
                         id="subdomain"
                     )
                     yield Static(
                         "[dim]Leave empty for a random subdomain\n"
-                        "Your tunnel will be: [subdomain].tunnel.ovream.com[/dim]\n"
+                        "Your tunnel will be: [blue].tunnel.ovream.com[/blue][/dim]\n"
                     )
                     
-                    # Add spacing before buttons
-                    yield Static("")
+                    # Add some space before buttons
+                    yield Static("\n")
                     
-                    with Horizontal(id="button-container"):
-                        yield Button("Create Tunnel", variant="primary", id="create")
-                        yield Button("Cancel", variant="default", id="cancel")
+                    # Button container
+                    yield Horizontal(
+                        Button("Create Tunnel", variant="primary", id="create"),
+                        Button("Cancel", variant="default", id="cancel"),
+                        id="button-container"
+                    )
         
         yield Footer()
     
