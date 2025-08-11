@@ -29,6 +29,7 @@ class LoginScreen(Screen):
         Binding("enter", "submit", "Submit"),
         Binding("o", "open_browser", "Open Browser"),
         Binding("b", "browser_auth", "Browser Auth"),
+        Binding("q", "quit", "Quit"),
     ]
     
     def compose(self) -> ComposeResult:
@@ -40,22 +41,22 @@ class LoginScreen(Screen):
                 Static(""),
                 Static("🔐 Authentication Options:", classes="info"),
                 Static(""),
-                Static("Option 1: Automatic Browser Authentication (Recommended)"),
-                Static("  • Press 'B' or click 'Browser Auth'"),
-                Static("  • Login in your browser"),
-                Static("  • The key will be received automatically"),
+                Static("[1] Browser Auth (Recommended)", classes="option-header"),
+                Static("    Press 'B' to auto-authenticate"),
+                Static("    Opens browser & receives key"),
                 Static(""),
-                Static("Option 2: Manual API Key"),
-                Static("  • Press 'O' to open the portal"),
-                Static("  • Create an API key and paste it below"),
+                Static("[2] Manual API Key", classes="option-header"),
+                Static("    Press 'O' for portal"),
+                Static("    Create & paste key below"),
                 Static(""),
                 Label("API Key:"),
-                Input(placeholder="Paste your API key here (tk_...)", id="api_key", password=True),
+                Input(placeholder="tk_...", id="api_key", password=True),
+                Static(""),
                 Horizontal(
-                    Button("Browser Auth", variant="success", id="browser_auth"),
-                    Button("Open Portal", variant="default", id="open_browser"),
-                    Button("Authenticate", variant="primary", id="authenticate"),
-                    Button("Quit", variant="default", id="quit"),
+                    Button("[B]rowser", variant="success", id="browser_auth"),
+                    Button("[O]pen", variant="default", id="open_browser"),
+                    Button("[Enter]", variant="primary", id="authenticate"),
+                    Button("[Q]uit", variant="default", id="quit"),
                     classes="button-group"
                 ),
                 id="login-form",
@@ -147,6 +148,10 @@ class LoginScreen(Screen):
         """Action for browser authentication"""
         await self.handle_browser_auth(None)
     
+    def action_quit(self) -> None:
+        """Action for Q key - quit the application"""
+        self.app.exit()
+    
     async def on_key(self, event) -> None:
         """Handle key presses"""
         if event.key == "enter":
@@ -173,13 +178,13 @@ class DashboardScreen(Screen):
         yield Container(
             Vertical(
                 Static(f"Tunnel Dashboard", classes="title"),
-                Static(f"Logged in as: {self.app.config.username}", classes="subtitle"),
+                Static(f"User: {self.app.config.username}", classes="subtitle"),
                 DataTable(id="tunnels-table"),
                 Horizontal(
-                    Button("New Tunnel", variant="primary", id="new"),
-                    Button("Connect", variant="success", id="connect"),
-                    Button("Delete", variant="error", id="delete"),
-                    Button("Refresh", variant="default", id="refresh"),
+                    Button("[N]ew", variant="primary", id="new"),
+                    Button("[C]onnect", variant="success", id="connect"),
+                    Button("[D]elete", variant="error", id="delete"),
+                    Button("[R]efresh", variant="default", id="refresh"),
                     classes="button-group"
                 ),
                 id="dashboard-container"
@@ -196,8 +201,8 @@ class DashboardScreen(Screen):
         table = self.query_one("#tunnels-table", DataTable)
         table.clear(columns=True)
         
-        # Add columns
-        table.add_columns("ID", "Subdomain", "Port", "Status", "URL")
+        # Add columns with shorter names for better fit
+        table.add_columns("ID", "Domain", "Port", "Status", "URL")
         
         try:
             tunnels = await self.app.api_client.list_tunnels()
@@ -298,18 +303,21 @@ class CreateTunnelScreen(Screen):
         yield Container(
             Vertical(
                 Static("Create New Tunnel", classes="title"),
+                Static(""),
                 Label("Local Port:"),
                 Input(placeholder="3000", id="local_port", value="3000"),
-                Label("Subdomain (optional):"),
-                Input(placeholder="Leave empty for random", id="subdomain"),
+                Static(""),
+                Label("Subdomain:"),
                 RadioSet(
-                    RadioButton("Random subdomain", id="random", value=True),
-                    RadioButton("Custom subdomain", id="custom"),
+                    RadioButton("Random", id="random", value=True),
+                    RadioButton("Custom", id="custom"),
                     id="subdomain_type"
                 ),
+                Input(placeholder="my-app", id="subdomain", disabled=True),
+                Static(""),
                 Horizontal(
-                    Button("Create", variant="primary", id="create"),
-                    Button("Cancel", variant="default", id="cancel"),
+                    Button("[Enter] Create", variant="primary", id="create"),
+                    Button("[Esc] Cancel", variant="default", id="cancel"),
                     classes="button-group"
                 ),
                 id="create-form",
@@ -471,7 +479,8 @@ class TunnelApp(App):
     }
     
     .form-container {
-        width: 60;
+        width: 50;
+        max-width: 90%;
         height: auto;
         border: solid #555;
         padding: 1 2;
@@ -482,7 +491,7 @@ class TunnelApp(App):
         text-align: center;
         text-style: bold;
         color: $primary;
-        margin: 1 0;
+        margin: 0 0;
     }
     
     .subtitle {
@@ -491,27 +500,41 @@ class TunnelApp(App):
         margin: 0 0 1 0;
     }
     
+    .info {
+        color: $warning;
+        text-style: bold;
+    }
+    
+    .option-header {
+        color: $success;
+        text-style: bold;
+    }
+    
     .button-group {
-        margin: 1 0;
+        margin: 0 0;
         align: center middle;
         height: 3;
     }
     
     .button-group Button {
         margin: 0 1;
+        min-width: 8;
     }
     
     Input {
-        margin: 0 0 1 0;
+        margin: 0 0 0 0;
+        width: 100%;
     }
     
     Label {
         margin: 0 0 0 0;
+        color: $text;
     }
     
     #tunnels-table {
         margin: 1 0;
-        height: 15;
+        height: 12;
+        width: 100%;
     }
     
     #log-container {
@@ -527,6 +550,10 @@ class TunnelApp(App):
     
     RadioSet {
         margin: 1 0;
+    }
+    
+    Static {
+        width: 100%;
     }
     """
     
