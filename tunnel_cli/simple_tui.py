@@ -153,28 +153,28 @@ class LoginScreen(Screen):
         """Start browser authentication flow"""
         import webbrowser
         
-        self.notify("Starting browser authentication...", severity="information")
+        self.notify("Starting browser authentication...", severity="information", timeout=2)
         
         auth_server = AuthServer()
         try:
             await auth_server.start()
             auth_url = auth_server.get_auth_url()
             
-            self.notify(f"Opening browser...")
+            self.notify(f"Opening browser...", timeout=2)
             webbrowser.open(auth_url)
             
-            self.notify("Waiting for authentication (2 minute timeout)...")
+            self.notify("Waiting for authentication (2 minute timeout)...", timeout=3)
             
             api_key = await auth_server.wait_for_auth(timeout=120)
             
             if api_key:
-                self.notify("API key received!", severity="success")
+                self.notify("API key received!", severity="success", timeout=2)
                 await self.authenticate_with_key(api_key)
             else:
-                self.notify("Authentication timeout. Please try manual method.", severity="warning")
+                self.notify("Authentication timeout. Please try manual method.", severity="warning", timeout=3)
         
         except Exception as e:
-            self.notify(f"Error: {str(e)}", severity="error")
+            self.notify(f"Error: {str(e)}", severity="error", timeout=3)
         
         finally:
             await auth_server.stop()
@@ -214,24 +214,24 @@ class LoginScreen(Screen):
         api_key = self.query_one("#api-key").value.strip()
         
         if not api_key:
-            self.notify("Please enter an API key", severity="error")
+            self.notify("Please enter an API key", severity="error", timeout=2)
             return
         
         if not api_key.startswith("tk_"):
-            self.notify("Invalid API key format (should start with tk_)", severity="error")
+            self.notify("Invalid API key format (should start with tk_)", severity="error", timeout=2)
             return
         
         await self.authenticate_with_key(api_key)
     
     async def authenticate_with_key(self, api_key: str) -> None:
         """Common authentication logic"""
-        self.notify("Authenticating...", severity="information")
+        self.notify("Authenticating...", severity="information", timeout=2)
         
         try:
             await self.app.authenticate_with_key(api_key)
             self.app.push_screen("dashboard")
         except Exception as e:
-            self.notify(f"Authentication failed: {str(e)}", severity="error")
+            self.notify(f"Authentication failed: {str(e)}", severity="error", timeout=3)
     
     @on(Button.Pressed, "#quit")
     def handle_quit(self, event: Button.Pressed = None) -> None:
@@ -287,6 +287,12 @@ class DashboardScreen(Screen):
         Binding("q", "quit", "Quit", show=True),
     ]
     
+    def show_message(self, message: str, severity: str = "information"):
+        """Show a simple status message instead of large notification"""
+        # Update the footer or a status label instead of using notify
+        # For now, we'll use notify with timeout=2 to make it disappear quickly
+        self.notify(message, severity=severity, timeout=2)
+    
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         
@@ -340,7 +346,7 @@ class DashboardScreen(Screen):
                         tunnel.get("url", "")
                     )
                 
-                self.notify(f"Loaded {len(tunnels)} tunnel(s)", severity="success")
+                # Don't show the "Loaded X tunnels" message - it's not needed
             else:
                 table.add_row(
                     "-",
@@ -351,7 +357,7 @@ class DashboardScreen(Screen):
                 )
         
         except Exception as e:
-            self.notify(f"Failed to load tunnels: {str(e)}", severity="error")
+            self.notify(f"Failed to load tunnels: {str(e)}", severity="error", timeout=3)
             table.add_row("-", "Error loading", "-", "-", str(e)[:40])
     
     def action_new_tunnel(self) -> None:
@@ -371,14 +377,14 @@ class DashboardScreen(Screen):
                     full_tunnel_id = tunnel_data.get("id")
                     try:
                         await self.app.api_client.delete_tunnel(full_tunnel_id)
-                        self.notify("Tunnel deleted", severity="success")
+                        self.notify("Tunnel deleted", severity="success", timeout=2)
                         await self.load_tunnels()
                     except Exception as e:
-                        self.notify(f"Failed to delete: {str(e)}", severity="error")
+                        self.notify(f"Failed to delete: {str(e)}", severity="error", timeout=3)
                 else:
-                    self.notify("Tunnel data not found", severity="error")
+                    self.notify("Tunnel data not found", severity="error", timeout=2)
         else:
-            self.notify("Please select a tunnel first", severity="warning")
+            self.notify("Please select a tunnel first", severity="warning", timeout=2)
     
     async def action_refresh(self) -> None:
         """Refresh tunnel list"""
@@ -461,10 +467,10 @@ class CreateTunnelScreen(Screen):
             if port < 1 or port > 65535:
                 raise ValueError("Port must be between 1 and 65535")
         except ValueError as e:
-            self.notify(str(e), severity="error")
+            self.notify(str(e), severity="error", timeout=2)
             return
         
-        self.notify("Creating tunnel...", severity="information")
+        self.notify("Creating tunnel...", severity="information", timeout=2)
         
         try:
             tunnel = await self.app.api_client.create_tunnel(
@@ -473,11 +479,12 @@ class CreateTunnelScreen(Screen):
             )
             self.notify(
                 f"Tunnel created: {tunnel['full_url']}",
-                severity="success"
+                severity="success",
+                timeout=3
             )
             self.app.pop_screen()
         except Exception as e:
-            self.notify(f"Failed to create tunnel: {str(e)}", severity="error")
+            self.notify(f"Failed to create tunnel: {str(e)}", severity="error", timeout=3)
     
     @on(Button.Pressed, "#cancel")
     def handle_cancel(self, event: Button.Pressed = None) -> None:
@@ -549,7 +556,7 @@ class TunnelApp(App):
         self.config.api_key = api_key
         self.config.username = profile.get("username", "User")
         
-        self.notify(f"Welcome, {self.config.username}!", severity="success")
+        self.notify(f"Welcome, {self.config.username}!", severity="success", timeout=2)
     
     async def on_shutdown(self) -> None:
         """Cleanup on shutdown"""
