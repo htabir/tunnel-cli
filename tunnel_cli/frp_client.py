@@ -21,13 +21,14 @@ import certifi
 class FRPClientManager:
     """Manages FRP client binary and tunnel connections"""
     
-    def __init__(self):
+    def __init__(self, api_client=None):
         self.frpc_path = None
         self.processes: Dict[str, subprocess.Popen] = {}
         self.config_dir = Path.home() / ".tunnel-cli" / "configs"
         self.bin_dir = Path.home() / ".tunnel-cli" / "bin"
         self.config_dir.mkdir(parents=True, exist_ok=True)
         self.bin_dir.mkdir(parents=True, exist_ok=True)
+        self.api_client = api_client
         
     async def ensure_frpc_installed(self) -> bool:
         """Ensure FRP client is installed"""
@@ -192,6 +193,13 @@ remote_port = {remote_port}
                 error_msg = f"FRP client failed to start.\nConfig:\n{config}\nStdout: {stdout}\nStderr: {stderr}"
                 raise Exception(error_msg)
             
+            # Report connection status to backend
+            if self.api_client:
+                try:
+                    await self.api_client.update_connection_status(tunnel_id, "connected")
+                except:
+                    pass  # Silently fail status updates
+            
             return True
             
         except Exception as e:
@@ -214,6 +222,13 @@ remote_port = {remote_port}
             config_file = self.config_dir / f"{tunnel_id}.ini"
             if config_file.exists():
                 config_file.unlink()
+            
+            # Report disconnection to backend
+            if self.api_client:
+                try:
+                    await self.api_client.update_connection_status(tunnel_id, "disconnected")
+                except:
+                    pass  # Silently fail status updates
             
             return True
         return False

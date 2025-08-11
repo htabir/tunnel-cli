@@ -142,3 +142,18 @@ class APIClient:
             headers=headers
         ) as response:
             return response.status == 200
+    
+    async def update_connection_status(self, tunnel_id: str, status: str):
+        """Update tunnel connection status"""
+        headers = {"X-API-Key": self.api_key} if self.api_key else {}
+        
+        async with self.session.put(
+            f"{self.api_url}/cli/tunnels/{tunnel_id}/connection-status",
+            headers=headers,
+            params={"status": status}
+        ) as response:
+            if response.status == 200:
+                return await response.json()
+            else:
+                # Silently fail status updates
+                return None

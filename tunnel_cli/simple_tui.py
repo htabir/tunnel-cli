@@ -26,7 +26,7 @@ from rich.text import Text
 from .api_client import APIClient
 from .config_manager import ConfigManager
 from .auth_server import AuthServer
-from .frp_client import frp_client_manager
+from .frp_client import FRPClientManager
 
 
 class LoginScreen(Screen):
@@ -345,7 +345,7 @@ class DashboardScreen(Screen):
                     local_port_str = str(local_port) if local_port else "-"
                     
                     # Check connection status
-                    connection_status = frp_client_manager.get_tunnel_status(tunnel_id)
+                    connection_status = self.app.frp_client_manager.get_tunnel_status(tunnel_id)
                     
                     if connection_status == "connected":
                         status_text = Text("● Connected", style="green")
@@ -422,7 +422,7 @@ class DashboardScreen(Screen):
                     local_port = tunnel_data.get("local_port")
                     
                     # Check if already connected
-                    if frp_client_manager.get_tunnel_status(tunnel_id) == "connected":
+                    if self.app.frp_client_manager.get_tunnel_status(tunnel_id) == "connected":
                         # Disconnect
                         asyncio.create_task(self._disconnect_tunnel(tunnel_id))
                     elif local_port:
@@ -443,11 +443,11 @@ class DashboardScreen(Screen):
                 self.notify(f"Port {local_port} is not available", severity="warning", timeout=3)
                 return
                 
-            if not await frp_client_manager.ensure_frpc_installed():
+            if not await self.app.frp_client_manager.ensure_frpc_installed():
                 self.notify("Failed to install FRP client", severity="error", timeout=3)
                 return
                 
-            await frp_client_manager.start_tunnel(tunnel_data, local_port)
+            await self.app.frp_client_manager.start_tunnel(tunnel_data, local_port)
             self.notify(f"Tunnel connected to port {local_port}", severity="success", timeout=2)
             await self.load_tunnels()
         except Exception as e:
@@ -456,7 +456,7 @@ class DashboardScreen(Screen):
     async def _disconnect_tunnel(self, tunnel_id: str):
         """Disconnect a tunnel"""
         try:
-            await frp_client_manager.stop_tunnel(tunnel_id)
+            await self.app.frp_client_manager.stop_tunnel(tunnel_id)
             self.notify("Tunnel disconnected", severity="success", timeout=2)
             await self.load_tunnels()
         except Exception as e:
@@ -479,7 +479,7 @@ class DashboardScreen(Screen):
             
         # Ensure FRP client is installed
         try:
-            if not await frp_client_manager.ensure_frpc_installed():
+            if not await self.app.frp_client_manager.ensure_frpc_installed():
                 return
         except:
             return
@@ -489,9 +489,9 @@ class DashboardScreen(Screen):
             if local_port and await self._is_port_available(local_port):
                 tunnel_id = tunnel.get("id")
                 # Check if not already connected
-                if frp_client_manager.get_tunnel_status(tunnel_id) != "connected":
+                if self.app.frp_client_manager.get_tunnel_status(tunnel_id) != "connected":
                     try:
-                        await frp_client_manager.start_tunnel(tunnel, local_port)
+                        await self.app.frp_client_manager.start_tunnel(tunnel, local_port)
                     except:
                         pass  # Silently fail auto-connect
         
@@ -582,12 +582,12 @@ class ConnectTunnelScreen(Screen):
         
         try:
             # Ensure FRP client is installed
-            if not await frp_client_manager.ensure_frpc_installed():
+            if not await self.app.frp_client_manager.ensure_frpc_installed():
                 self.notify("Failed to install FRP client", severity="error", timeout=3)
                 return
             
             # Start the tunnel
-            await frp_client_manager.start_tunnel(self.tunnel_data, local_port)
+            await self.app.frp_client_manager.start_tunnel(self.tunnel_data, local_port)
             self.notify(
                 f"Tunnel connected! Your app is available at https://{self.tunnel_data.get('subdomain')}.tunnel.ovream.com",
                 severity="success",
@@ -700,9 +700,9 @@ class CreateTunnelScreen(Screen):
             if await self._is_port_available(port):
                 try:
                     # Ensure FRP client is installed
-                    if await frp_client_manager.ensure_frpc_installed():
+                    if await self.app.frp_client_manager.ensure_frpc_installed():
                         # Start the tunnel
-                        await frp_client_manager.start_tunnel(tunnel, port)
+                        await self.app.frp_client_manager.start_tunnel(tunnel, port)
                         self.notify(
                             f"Tunnel created and connected: {tunnel['full_url']}",
                             severity="success",
@@ -781,6 +781,7 @@ class TunnelApp(App):
         super().__init__()
         self.config = ConfigManager()
         self.api_client = APIClient()
+        self.frp_client_manager = FRPClientManager(self.api_client)
     
     async def on_mount(self) -> None:
         """Initialize app on mount"""
@@ -820,7 +821,7 @@ class TunnelApp(App):
     async def on_shutdown(self) -> None:
         """Cleanup on shutdown"""
         # Stop all running tunnels
-        await frp_client_manager.stop_all_tunnels()
+        await self.frp_client_manager.stop_all_tunnels()
         # Close API client
         await self.api_client.__aexit__(None, None, None)
 
