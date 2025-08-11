@@ -144,12 +144,13 @@ class FRPClientManager:
         config_content = f"""[common]
 server_addr = tunnel.ovream.com
 server_port = 7000
+token = Fib112358
 
-[{subdomain}]
-type = http
+[tunnel_{tunnel_id[:8]}]
+type = tcp
 local_ip = 127.0.0.1
 local_port = {local_port}
-custom_domains = {subdomain}.tunnel.ovream.com
+remote_port = {remote_port}
 """
         
         config_file.write_text(config_content)
@@ -178,12 +179,18 @@ custom_domains = {subdomain}.tunnel.ovream.com
             self.processes[tunnel_id] = process
             
             # Wait a bit to check if it started successfully
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
             
             if process.poll() is not None:
-                # Process died
+                # Process died - get detailed error
+                stdout = process.stdout.read().decode() if process.stdout else ""
                 stderr = process.stderr.read().decode() if process.stderr else ""
-                raise Exception(f"FRP client failed to start: {stderr}")
+                
+                # Log config for debugging
+                config = config_file.read_text() if config_file.exists() else "No config"
+                
+                error_msg = f"FRP client failed to start.\nConfig:\n{config}\nStdout: {stdout}\nStderr: {stderr}"
+                raise Exception(error_msg)
             
             return True
             
