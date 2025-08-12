@@ -544,23 +544,22 @@ class CreateTunnelScreen(Screen):
     
     #create-panel {
         width: 60;
-        height: 30;
-        padding: 2;
+        min-height: 20;
+        max-height: 90%;
+        padding: 1 2;
         border: solid $primary;
         overflow-y: auto;
-        overflow-x: hidden;
     }
     
     #button-row {
         height: 3;
-        align: center middle;
+        width: 100%;
         margin-top: 1;
     }
     
-    Button {
-        margin: 0 1;
+    #button-row Button {
         width: 16;
-        height: 3;
+        margin: 0 1;
     }
     """
     
@@ -573,46 +572,46 @@ class CreateTunnelScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         
-        with Container(id="main-container"):
-            with Center():
-                with Middle():
-                    with Container(id="create-panel"):
-                        yield Static("[bold cyan]═══ Create New Tunnel ═══[/bold cyan]")
-                        yield Static("")
-                        yield Static(
-                            "[dim]Create a secure tunnel to expose your local service[/dim]"
-                        )
-                        yield Static("")
-                        
-                        yield Label("Local Port:")
-                        yield Input(
-                            placeholder="80",
-                            id="port",
-                            value="80"
-                        )
-                        yield Static(
-                            "[dim]The port your local application is running on[/dim]"
-                        )
-                        yield Static("")
-                        
-                        yield Label("Subdomain (optional):")
-                        yield Input(
-                            placeholder="eighty",
-                            id="subdomain"
-                        )
-                        yield Static(
-                            "[dim]Leave empty for a random subdomain[/dim]"
-                        )
-                        yield Static(
-                            "[dim]Your tunnel will be: [blue].tunnel.ovream.com[/blue][/dim]"
-                        )
-                        yield Static("")
-                        
-                        # Buttons at the bottom
-                        yield Static("")
-                        yield Static("[bold green]Press ENTER to Create Tunnel[/bold green]  |  [bold red]Press ESC to Cancel[/bold red]", id="button-info")
-                        yield Static("")
-                        # Try buttons as well
+        with Center():
+            with Middle():
+                with Container(id="create-panel"):
+                    yield Static("[bold cyan]═══ Create New Tunnel ═══[/bold cyan]")
+                    yield Static("")
+                    yield Static(
+                        "[dim]Create a secure tunnel to expose your local service[/dim]"
+                    )
+                    yield Static("")
+                    
+                    yield Label("Local Port:")
+                    yield Input(
+                        placeholder="80",
+                        id="port",
+                        value="80"
+                    )
+                    yield Static(
+                        "[dim]The port your local application is running on[/dim]"
+                    )
+                    yield Static("")
+                    
+                    yield Label("Subdomain (optional):")
+                    yield Input(
+                        placeholder="eighty",
+                        id="subdomain"
+                    )
+                    yield Static(
+                        "[dim]Leave empty for a random subdomain[/dim]"
+                    )
+                    yield Static(
+                        "[dim]Your tunnel will be: [blue].tunnel.ovream.com[/blue][/dim]"
+                    )
+                    yield Static("")
+                    
+                    # Instructions
+                    yield Static("[bold green]Press ENTER to Create Tunnel[/bold green]  |  [bold red]Press ESC to Cancel[/bold red]", id="button-info")
+                    yield Static("")
+                    
+                    # Buttons in horizontal container
+                    with Horizontal(id="button-row"):
                         yield Button("Create Tunnel", variant="primary", id="create")
                         yield Button("Cancel", variant="default", id="cancel")
         
