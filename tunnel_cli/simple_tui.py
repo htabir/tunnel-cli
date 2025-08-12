@@ -547,19 +547,20 @@ class CreateTunnelScreen(Screen):
         height: 30;
         padding: 2;
         border: solid $primary;
-        overflow: visible;
+        overflow-y: auto;
+        overflow-x: hidden;
     }
     
     #button-row {
-        dock: bottom;
         height: 3;
         align: center middle;
-        margin: 1 0;
+        margin-top: 1;
     }
     
-    #button-row Button {
+    Button {
         margin: 0 1;
         width: 16;
+        height: 3;
     }
     """
     
