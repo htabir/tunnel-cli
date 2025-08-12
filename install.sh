@@ -1,8 +1,7 @@
 #!/bin/bash
-#
-# Tunnel CLI Installer Script
-# Supports macOS and Linux
-#
+# Tunnel CLI Universal Installer for Linux/macOS
+# Usage: curl -sSL https://tunnel.ovream.com/install | bash
+# or: wget -qO- https://tunnel.ovream.com/install | bash
 
 set -e
 
