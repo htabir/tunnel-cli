@@ -602,7 +602,8 @@ class CreateTunnelScreen(Screen):
                         "[dim]Leave empty for a random subdomain[/dim]"
                     )
                     yield Static(
-                        "[dim]Your tunnel will be: [blue].tunnel.ovream.com[/blue][/dim]"
+                        "[blue]<random>.tunnel.ovream.com[/blue]",
+                        id="tunnel-url"
                     )
                     yield Static("")
                     
@@ -616,6 +617,27 @@ class CreateTunnelScreen(Screen):
                         yield Button("Cancel", variant="default", id="cancel")
         
         yield Footer()
+    
+    def on_mount(self) -> None:
+        """Setup event handlers when screen mounts"""
+        subdomain_input = self.query_one("#subdomain", Input)
+        subdomain_input.on_change = self.update_tunnel_url
+    
+    def update_tunnel_url(self) -> None:
+        """Update the tunnel URL display based on subdomain input"""
+        subdomain_input = self.query_one("#subdomain", Input)
+        url_display = self.query_one("#tunnel-url", Static)
+        
+        subdomain = subdomain_input.value.strip()
+        if subdomain:
+            url_display.update(f"[blue]{subdomain}.tunnel.ovream.com[/blue]")
+        else:
+            url_display.update("[blue]<random>.tunnel.ovream.com[/blue]")
+    
+    @on(Input.Changed, "#subdomain")
+    def on_subdomain_changed(self, event: Input.Changed) -> None:
+        """Handle subdomain input changes"""
+        self.update_tunnel_url()
     
     @on(Button.Pressed, "#create")
     async def handle_create(self, event: Button.Pressed = None) -> None:
