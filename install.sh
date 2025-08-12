@@ -149,32 +149,120 @@ rm -rf "$TEMP_DIR"
 
 print_success "tunnel-cli installed successfully!"
 
+# Create tunnel alias/command
+print_info "Setting up 'tunnel' command..."
+
+# Determine the user's shell
+SHELL_NAME=$(basename "$SHELL")
+SHELL_RC=""
+
+case "$SHELL_NAME" in
+    bash)
+        SHELL_RC="$HOME/.bashrc"
+        ;;
+    zsh)
+        SHELL_RC="$HOME/.zshrc"
+        ;;
+    fish)
+        SHELL_RC="$HOME/.config/fish/config.fish"
+        ;;
+    *)
+        SHELL_RC="$HOME/.profile"
+        ;;
+esac
+
+# Create a universal tunnel script in ~/.local/bin
+mkdir -p "$HOME/.local/bin"
+TUNNEL_SCRIPT="$HOME/.local/bin/tunnel"
+
+cat > "$TUNNEL_SCRIPT" << EOF
+#!/usr/bin/env bash
+# Tunnel CLI launcher script
+exec $PYTHON_CMD -m tunnel_cli "\$@"
+EOF
+
+chmod +x "$TUNNEL_SCRIPT"
+print_success "Created launcher script at $TUNNEL_SCRIPT"
+
+# Add PATH and alias to shell config if needed
+if [ -f "$SHELL_RC" ]; then
+    # Check if .local/bin is in PATH
+    if ! grep -q "export PATH.*HOME/.local/bin" "$SHELL_RC"; then
+        echo "" >> "$SHELL_RC"
+        echo "# Added by Tunnel CLI installer" >> "$SHELL_RC"
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+        print_success "Added ~/.local/bin to PATH in $SHELL_RC"
+    fi
+    
+    # Add alias as backup
+    if ! grep -q "alias tunnel=" "$SHELL_RC"; then
+        echo "alias tunnel='$PYTHON_CMD -m tunnel_cli'" >> "$SHELL_RC"
+        print_success "Added tunnel alias to $SHELL_RC"
+    fi
+else
+    # Create shell config with PATH and alias
+    echo "# Added by Tunnel CLI installer" > "$SHELL_RC"
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+    echo "alias tunnel='$PYTHON_CMD -m tunnel_cli'" >> "$SHELL_RC"
+    print_success "Created $SHELL_RC with tunnel command"
+fi
+
+# For macOS, also update .bash_profile if it exists (for Terminal.app compatibility)
+if [ "$OS_TYPE" = "Mac" ] && [ -f "$HOME/.bash_profile" ]; then
+    if ! grep -q "export PATH.*HOME/.local/bin" "$HOME/.bash_profile"; then
+        echo "" >> "$HOME/.bash_profile"
+        echo "# Added by Tunnel CLI installer" >> "$HOME/.bash_profile"
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bash_profile"
+        echo "alias tunnel='$PYTHON_CMD -m tunnel_cli'" >> "$HOME/.bash_profile"
+        print_success "Updated .bash_profile for macOS Terminal.app"
+    fi
+fi
+
 # Verify installation
 print_info "Verifying installation..."
 
-if command -v tunnel &> /dev/null; then
-    print_success "Installation verified"
+# Test if the module works
+if $PYTHON_CMD -m tunnel_cli --version &> /dev/null; then
+    print_success "Installation verified - tunnel_cli module is working"
+    
     echo ""
     echo "======================================"
-    echo "    Installation Complete!            "
+    echo "    Installation Complete! 🎉        "
     echo "======================================"
     echo ""
-    echo "You can now use the tunnel command:"
-    echo "  tunnel              - Start the TUI"
-    echo "  tunnel --help       - Show help"
-    echo "  tunnel --version    - Show version"
+    echo "The 'tunnel' command has been installed!"
+    echo ""
+    echo "To start using it:"
     echo ""
     
-    # Check if PATH needs updating
+    # Check if we need to reload shell
     if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-        echo "Note: You may need to add ~/.local/bin to your PATH"
-        echo "Add this line to your ~/.bashrc or ~/.zshrc:"
-        echo '  export PATH="$PATH:$HOME/.local/bin"'
+        echo "  Option 1: Reload your shell configuration"
+        echo "    source $SHELL_RC"
         echo ""
-        echo "Or restart your terminal for changes to take effect."
+        echo "  Option 2: Restart your terminal"
+        echo ""
+        echo "  Option 3: Use the full command now"
+        echo "    $PYTHON_CMD -m tunnel_cli"
+    else
+        # PATH is already set, check if script exists
+        if [ -x "$TUNNEL_SCRIPT" ]; then
+            echo "  tunnel              - Start the TUI"
+            echo "  tunnel --help       - Show help"
+            echo "  tunnel --version    - Show version"
+        else
+            echo "  Reload your shell or run:"
+            echo "    source $SHELL_RC"
+            echo ""
+            echo "  Then use:"
+            echo "    tunnel              - Start the TUI"
+        fi
     fi
+    
+    echo ""
+    echo "After reloading your shell, you can run 'tunnel' from anywhere!"
 else
-    print_error "Installation failed - 'tunnel' command not found"
+    print_error "Installation failed - tunnel_cli module not working"
     echo "Please check the installation logs above for errors"
     exit 1
 fi

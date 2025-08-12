@@ -152,45 +152,92 @@ function Create-Launchers {
     
     Write-Info "Creating launcher scripts..."
     
-    # Create batch file in user profile
-    $batchFile = Join-Path $env:USERPROFILE "tunnel.bat"
+    # Create Scripts directory if it doesn't exist
+    $scriptsDir = Join-Path $env:USERPROFILE "Scripts"
+    if (!(Test-Path $scriptsDir)) {
+        New-Item -ItemType Directory -Path $scriptsDir -Force | Out-Null
+    }
+    
+    # Create batch file for Command Prompt
+    $batchFile = Join-Path $scriptsDir "tunnel.bat"
     $batchContent = "@echo off`n$PythonCmd -m tunnel_cli %*"
     Set-Content -Path $batchFile -Value $batchContent -Force
+    Write-Success "Created batch launcher: $batchFile"
     
-    Write-Success "Created launcher: $batchFile"
+    # Create PowerShell script
+    $psScriptFile = Join-Path $scriptsDir "tunnel.ps1"
+    $psScriptContent = "& $PythonCmd -m tunnel_cli `$args"
+    Set-Content -Path $psScriptFile -Value $psScriptContent -Force
+    Write-Success "Created PowerShell launcher: $psScriptFile"
     
-    # Create PowerShell alias
-    $psProfileDir = Split-Path $PROFILE -Parent
-    if (!(Test-Path $psProfileDir)) {
-        New-Item -ItemType Directory -Path $psProfileDir -Force | Out-Null
-    }
+    # Also create one in user profile for backwards compatibility
+    $profileBatch = Join-Path $env:USERPROFILE "tunnel.bat"
+    Copy-Item $batchFile $profileBatch -Force
     
-    $aliasCommand = "function tunnel { & $PythonCmd -m tunnel_cli `$args }"
+    # Create PowerShell function/alias in all PowerShell profiles
+    $profiles = @(
+        $PROFILE.CurrentUserCurrentHost,
+        $PROFILE.CurrentUserAllHosts
+    )
     
-    if (Test-Path $PROFILE) {
-        $profileContent = Get-Content $PROFILE -Raw
-        if ($profileContent -notmatch "function tunnel") {
-            Add-Content -Path $PROFILE -Value "`n# Tunnel CLI alias`n$aliasCommand"
-            Write-Success "Added tunnel alias to PowerShell profile"
+    $aliasCommand = @"
+
+# Tunnel CLI alias (added by installer)
+function tunnel { & $PythonCmd -m tunnel_cli `$args }
+Set-Alias -Name tnl -Value tunnel -Scope Global -ErrorAction SilentlyContinue
+"@
+    
+    foreach ($profilePath in $profiles) {
+        if ($profilePath) {
+            $psProfileDir = Split-Path $profilePath -Parent
+            if (!(Test-Path $psProfileDir)) {
+                New-Item -ItemType Directory -Path $psProfileDir -Force | Out-Null
+            }
+            
+            if (Test-Path $profilePath) {
+                $profileContent = Get-Content $profilePath -Raw -ErrorAction SilentlyContinue
+                if ($profileContent -and ($profileContent -notmatch "function tunnel")) {
+                    Add-Content -Path $profilePath -Value $aliasCommand
+                    Write-Success "Added tunnel alias to $profilePath"
+                }
+            } else {
+                Set-Content -Path $profilePath -Value $aliasCommand
+                Write-Success "Created PowerShell profile with tunnel alias: $profilePath"
+            }
         }
-    } else {
-        Set-Content -Path $PROFILE -Value "# Tunnel CLI alias`n$aliasCommand"
-        Write-Success "Created PowerShell profile with tunnel alias"
     }
+    
+    # Create a tunnel.cmd file for broader compatibility
+    $cmdFile = Join-Path $scriptsDir "tunnel.cmd"
+    $cmdContent = "@echo off`n$PythonCmd -m tunnel_cli %*"
+    Set-Content -Path $cmdFile -Value $cmdContent -Force
+    Write-Success "Created CMD launcher: $cmdFile"
 }
 
 # Update PATH
 function Update-Path {
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    $scriptsDir = Join-Path $env:USERPROFILE "Scripts"
     $userProfile = $env:USERPROFILE
     
-    if ($userPath -notlike "*$userProfile*") {
-        $newPath = "$userPath;$userProfile"
-        [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-        $env:Path = "$env:Path;$userProfile"
-        Write-Success "Added $userProfile to PATH"
+    $pathsToAdd = @($scriptsDir, $userProfile)
+    $pathsAdded = @()
+    
+    foreach ($pathToAdd in $pathsToAdd) {
+        if ($userPath -notlike "*$pathToAdd*") {
+            $userPath = "$userPath;$pathToAdd"
+            $pathsAdded += $pathToAdd
+        }
+    }
+    
+    if ($pathsAdded.Count -gt 0) {
+        [Environment]::SetEnvironmentVariable("Path", $userPath, "User")
+        $env:Path = "$env:Path;$($pathsAdded -join ';')"
+        foreach ($added in $pathsAdded) {
+            Write-Success "Added $added to PATH"
+        }
     } else {
-        Write-Info "PATH already includes user profile directory"
+        Write-Info "PATH already includes all required directories"
     }
 }
 
@@ -244,24 +291,28 @@ function Install-Main {
     Write-Host "║   Installation Complete! 🎉          ║" -ForegroundColor Green
     Write-Host "╚══════════════════════════════════════╝" -ForegroundColor Green
     Write-Host ""
-    Write-Host "To start using Tunnel CLI:" -ForegroundColor Cyan
+    Write-Host "The 'tunnel' command has been installed!" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  Option 1: " -ForegroundColor Yellow -NoNewline
-    Write-Host "Run directly"
-    Write-Host "    $pythonCmd -m tunnel_cli" -ForegroundColor Green
+    Write-Host "You can now use it in:" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  Option 2: " -ForegroundColor Yellow -NoNewline
-    Write-Host "Use the batch file"
-    Write-Host "    $env:USERPROFILE\tunnel" -ForegroundColor Green
+    Write-Host "  ✓ PowerShell:    " -ForegroundColor Green -NoNewline
+    Write-Host "tunnel"
+    Write-Host "  ✓ Command Prompt: " -ForegroundColor Green -NoNewline
+    Write-Host "tunnel"
+    Write-Host "  ✓ Windows Terminal: " -ForegroundColor Green -NoNewline
+    Write-Host "tunnel"
     Write-Host ""
-    Write-Host "  Option 3: " -ForegroundColor Yellow -NoNewline
-    Write-Host "After restarting PowerShell"
-    Write-Host "    tunnel" -ForegroundColor Green
+    Write-Host "Available immediately:" -ForegroundColor Yellow
+    Write-Host "  $pythonCmd -m tunnel_cli" -ForegroundColor Green
     Write-Host ""
-    Write-Host "For help: " -ForegroundColor Gray -NoNewline
-    Write-Host "tunnel --help"
+    Write-Host "After restarting your terminal:" -ForegroundColor Yellow
+    Write-Host "  tunnel              - Start the TUI" -ForegroundColor Green
+    Write-Host "  tunnel --help       - Show help" -ForegroundColor Green
+    Write-Host "  tunnel --version    - Show version" -ForegroundColor Green
+    Write-Host "  tnl                 - Short alias (PowerShell only)" -ForegroundColor Green
+    Write-Host ""
     Write-Host "Portal: " -ForegroundColor Gray -NoNewline
-    Write-Host "https://tunnel.ovream.com"
+    Write-Host "https://tunnel.ovream.com" -ForegroundColor Cyan
     Write-Host ""
     
     if (-not $testResult) {
