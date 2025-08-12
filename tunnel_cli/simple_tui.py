@@ -40,31 +40,47 @@ class LoginScreen(Screen):
     #login-panel {
         width: 70;
         height: auto;
+        max-height: 24;
         max-width: 100;
         padding: 1 2;
+        border: solid $primary;
+    }
+    
+    .title {
+        text-align: center;
+        margin: 0 0 0 0;
+    }
+    
+    .subtitle {
+        text-align: center;
+        color: $text-muted;
+        margin: 0 0 1 0;
     }
     
     .help-text {
         color: $text-muted;
-        margin: 1 0;
-    }
-    
-    .option-title {
-        color: $success;
-        text-style: bold;
-        margin: 1 0;
+        margin: 0 0 0 0;
+        padding-left: 2;
     }
     
     .hidden {
         display: none;
     }
     
+    #button-group {
+        height: 3;
+        width: 100%;
+        margin: 1 0 0 0;
+    }
+    
     Button {
         margin: 0 1;
+        min-width: 14;
     }
     
     Input {
         width: 100%;
+        margin: 0 0 1 0;
     }
     """
     
@@ -80,47 +96,34 @@ class LoginScreen(Screen):
             with Middle():
                 with Vertical(id="login-panel"):
                     yield Static(
-                        "[bold cyan]🚀 Tunnel CLI Authentication[/bold cyan]\n",
+                        "[bold cyan]🚀 Tunnel CLI Authentication[/bold cyan]",
                         classes="title"
                     )
                     yield Static("─" * 50)
                     
-                    # Help text
                     yield Static(
-                        "Welcome to Tunnel CLI! This tool helps you create secure\n"
-                        "tunnels to expose your local services to the internet.\n"
-                        "\n"
-                        "First, you need to authenticate with your Tunnel account.",
+                        "Authenticate to create secure tunnels",
+                        classes="subtitle"
+                    )
+                    
+                    # Option 1: Browser Auth (ultra-compact)
+                    yield Static("[green]◉ Browser Auth[/green] [dim](Recommended)[/dim] - Press [bold]B[/bold]")
+                    yield Static(
+                        "  Opens browser → Login → Auto-receives key",
                         classes="help-text"
                     )
                     
-                    yield Static("─" * 50, classes="dim")
-                    
-                    # Option 1: Browser Auth
-                    yield Static("\n[green]Option 1: Browser Authentication[/green] [dim](Recommended)[/dim]")
+                    # Option 2: Manual (ultra-compact)
+                    yield Static("[yellow]◉ Manual Key[/yellow] - Press [bold]M[/bold]")
                     yield Static(
-                        "  • Press [bold]B[/bold] to open your browser\n"
-                        "  • Login to your Tunnel account\n" 
-                        "  • An API key will be created automatically\n"
-                        "  • The key will be sent back to this CLI\n"
-                        "  • No copy-paste required!",
+                        "  Get key from tunnel.ovream.com/api-keys",
                         classes="help-text"
                     )
                     
-                    # Option 2: Manual
-                    yield Static("\n[yellow]Option 2: Manual API Key[/yellow]")
-                    yield Static(
-                        "  • Press [bold]M[/bold] to enter manual mode\n"
-                        "  • Go to https://tunnel.ovream.com/api-keys\n"
-                        "  • Create a new API key\n"
-                        "  • Copy and paste it here",
-                        classes="help-text"
-                    )
-                    
-                    yield Static("─" * 50, classes="dim")
+                    yield Static("")  # Small spacer
                     
                     # API Key input (hidden initially)
-                    yield Label("\nAPI Key:", id="api-label", classes="hidden")
+                    yield Label("API Key:", id="api-label", classes="hidden")
                     yield Input(
                         placeholder="Paste your API key here (tk_...)",
                         id="api-key",
@@ -128,21 +131,28 @@ class LoginScreen(Screen):
                         classes="hidden"
                     )
                     
+                    # Authenticate button (hidden initially)
+                    yield Button(
+                        "✓ Authenticate",
+                        variant="primary",
+                        id="authenticate",
+                        classes="hidden"
+                    )
+                    
                     # Action buttons
-                    yield Static("")  # Spacer
                     with Horizontal(id="button-group"):
                         yield Button(
-                            "🌐 Browser Auth [B]",
+                            "🌐 Browser Auth",
                             variant="success",
                             id="browser"
                         )
                         yield Button(
-                            "🔑 Manual Key [M]",
+                            "🔑 Manual Key",
                             variant="warning",
                             id="manual"
                         )
                         yield Button(
-                            "❌ Quit [Q]",
+                            "❌ Quit",
                             variant="error",
                             id="quit"
                         )
