@@ -125,7 +125,6 @@ class LoginScreen(Screen):
                     # API Key input (hidden initially)
                     yield Label("API Key:", id="api-label", classes="hidden")
                     yield Input(
-                        placeholder="Paste your API key here (tk_...)",
                         id="api-key",
                         password=True,
                         classes="hidden"
@@ -629,9 +628,7 @@ class CreateTunnelScreen(Screen):
                     
                     yield Label("Local Port:")
                     yield Input(
-                        placeholder="80",
-                        id="port",
-                        value="80"
+                        id="port"
                     )
                     yield Static(
                         "[dim]The port your local application is running on[/dim]"
@@ -640,7 +637,6 @@ class CreateTunnelScreen(Screen):
                     
                     yield Label("Subdomain (optional):", id="subdomain-label")
                     yield Input(
-                        placeholder="eighty",
                         id="subdomain"
                     )
                     yield Static(
@@ -860,7 +856,6 @@ class EditTunnelPortScreen(Screen):
                     
                     yield Label("Local Port:")
                     yield Input(
-                        placeholder="e.g., 3000, 8080, 5000",
                         id="port",
                         value=str(self.current_port) if self.current_port else ""
                     )
