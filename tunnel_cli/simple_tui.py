@@ -341,21 +341,23 @@ class DashboardScreen(Screen):
             
             # Format tunnel quota
             max_tunnels = quota.get('max_tunnels', 0)
+            used_tunnels = quota.get('used_tunnels', 0)
             if max_tunnels == -1:
-                tunnels_info = f"[bold]Tunnels:[/bold] {quota.get('used_tunnels', 0)}/∞"
+                tunnels_info = f"[bold]Tunnels:[/bold] {used_tunnels}/∞"
             else:
-                tunnels_info = f"[bold]Tunnels:[/bold] {quota.get('used_tunnels', 0)}/{max_tunnels}"
+                tunnels_info = f"[bold]Tunnels:[/bold] {used_tunnels}/{max_tunnels}"
             
             # Format custom domain quota
             max_custom = quota.get('max_custom_domains', 0)
+            used_custom = quota.get('used_custom_domains', 0)
             if max_custom == -1:
-                domains_info = f"[bold]Custom Domains:[/bold] {quota.get('used_custom_domains', 0)}/∞"
+                domains_info = f"[bold]Custom Domains:[/bold] {used_custom}/∞"
             else:
-                domains_info = f"[bold]Custom Domains:[/bold] {quota.get('used_custom_domains', 0)}/{max_custom}"
+                domains_info = f"[bold]Custom Domains:[/bold] {used_custom}/{max_custom}"
             
             quota_text.update(f"[yellow]📊 Quota:[/yellow] {tunnels_info} | {domains_info}")
-        except Exception:
-            # Silent fail if quota endpoint not available
+        except Exception as e:
+            # If quota fails, just don't show it
             pass
     
     async def periodic_sync(self) -> None:
@@ -666,6 +668,10 @@ class CreateTunnelScreen(Screen):
     async def on_mount(self) -> None:
         """Setup event handlers when screen mounts and check quota"""
         subdomain_input = self.query_one("#subdomain", Input)
+        subdomain_label = self.query_one("#subdomain-label", Label)
+        subdomain_help = self.query_one("#subdomain-help", Static)
+        quota_warning = self.query_one("#quota-warning", Static)
+        
         subdomain_input.on_change = self.update_tunnel_url
         
         # Check quota for custom domains
@@ -674,20 +680,23 @@ class CreateTunnelScreen(Screen):
             can_use_custom = quota.get('can_use_custom_domain', True)
             
             if not can_use_custom:
-                # Disable custom subdomain input
-                subdomain_input.disabled = True
-                subdomain_input.placeholder = "Quota exhausted"
+                # Hide the subdomain input completely
+                subdomain_label.display = False
+                subdomain_input.display = False
+                subdomain_help.display = False
                 
-                # Show warning
-                quota_warning = self.query_one("#quota-warning", Static)
+                # Show warning that only random domains are available
                 used = quota.get('used_custom_domains', 0)
                 limit = quota.get('max_custom_domains', 0)
-                quota_warning.update(f"[bold red]⚠️ Custom domain quota exhausted ({used}/{limit})[/bold red]")
+                quota_warning.update(
+                    f"[bold yellow]⚠️ Custom domain quota exhausted ({used}/{limit})[/bold yellow]\n"
+                    f"[dim]A random subdomain will be assigned automatically[/dim]"
+                )
                 
-                # Update help text
-                help_text = self.query_one("#subdomain-help", Static)
-                help_text.update("[dim]Random subdomain will be assigned[/dim]")
-        except Exception:
+                # Update the URL display to show random will be assigned
+                url_display = self.query_one("#tunnel-url", Static)
+                url_display.update("[blue]<random>.tunnel.ovream.com[/blue]")
+        except Exception as e:
             # Silent fail if quota endpoint not available
             pass
     

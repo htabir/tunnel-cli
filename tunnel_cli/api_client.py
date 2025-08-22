@@ -110,7 +110,8 @@ class APIClient:
     
     async def get_quota_info(self) -> Dict[str, Any]:
         """Get quota information"""
-        headers = {"X-API-Key": self.api_key} if self.api_key else {}
+        # Use Bearer auth for the quota endpoint
+        headers = {"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}
         async with self.session.get(
             f"{self.api_url}/tunnels/quota/info",
             headers=headers
@@ -118,12 +119,13 @@ class APIClient:
             if response.status == 200:
                 return await response.json()
             else:
+                # Return default quota if endpoint fails
                 return {
-                    "tunnels_limit": 0,
-                    "tunnels_used": 0,
-                    "custom_domains_limit": 0,
-                    "custom_domains_used": 0,
-                    "can_create_tunnel": False,
+                    "max_tunnels": 3,
+                    "used_tunnels": 0,
+                    "max_custom_domains": 0,
+                    "used_custom_domains": 0,
+                    "can_create_tunnel": True,
                     "can_use_custom_domain": False
                 }
     
@@ -176,3 +178,17 @@ class APIClient:
             else:
                 # Silently fail status updates
                 return None
+    
+    async def update_tunnel_port(self, tunnel_id: str, local_port: Optional[int]) -> Dict[str, Any]:
+        """Update tunnel's local port"""
+        headers = {"X-API-Key": self.api_key} if self.api_key else {}
+        async with self.session.put(
+            f"{self.api_url}/cli/tunnels/{tunnel_id}/port",
+            headers=headers,
+            json={"local_port": local_port}
+        ) as response:
+            if response.status == 200:
+                return await response.json()
+            else:
+                error = await response.json()
+                raise Exception(error.get("detail", "Failed to update port"))
