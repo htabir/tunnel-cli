@@ -179,6 +179,7 @@ class DashboardScreen(Screen):
             Vertical(
                 Static(f"Tunnel Dashboard", classes="title"),
                 Static(f"User: {self.app.config.username}", classes="subtitle"),
+                Static("", id="quota-info", classes="info"),
                 DataTable(id="tunnels-table"),
                 Horizontal(
                     Button("[N]ew", variant="primary", id="new"),
@@ -193,8 +194,23 @@ class DashboardScreen(Screen):
         yield Footer()
     
     async def on_mount(self) -> None:
-        """When screen is mounted, load tunnels"""
+        """When screen is mounted, load tunnels and quota"""
+        await self.load_quota_info()
         await self.load_tunnels()
+    
+    async def load_quota_info(self) -> None:
+        """Load and display quota information"""
+        try:
+            quota = await self.app.api_client.get_quota_info()
+            quota_text = self.query_one("#quota-info", Static)
+            
+            tunnels_info = f"Tunnels: {quota.get('tunnels_used', 0)}/{quota.get('tunnels_limit', '∞')}"
+            domains_info = f"Custom Domains: {quota.get('custom_domains_used', 0)}/{quota.get('custom_domains_limit', 0)}"
+            
+            quota_text.update(f"📊 Quota: {tunnels_info} | {domains_info}")
+        except Exception:
+            # Silent fail if quota endpoint not available
+            pass
     
     async def load_tunnels(self) -> None:
         """Load and display tunnels"""
@@ -202,26 +218,29 @@ class DashboardScreen(Screen):
         table.clear(columns=True)
         
         # Add columns with shorter names for better fit
-        table.add_columns("ID", "Domain", "Port", "Status", "URL")
+        table.add_columns("ID", "Type", "Domain", "Port", "Status", "URL")
         
         try:
             tunnels = await self.app.api_client.list_tunnels()
             
             if tunnels:
                 for tunnel in tunnels:
+                    # Determine if custom or random
+                    domain_type = "[C]" if tunnel.get("is_custom_subdomain", False) else "[R]"
                     table.add_row(
                         tunnel.get("id", "")[:8],
+                        domain_type,
                         tunnel.get("subdomain", ""),
                         str(tunnel.get("remote_port", "")),
                         tunnel.get("status", ""),
                         tunnel.get("url", "")
                     )
             else:
-                table.add_row("-", "No tunnels", "-", "-", "-")
+                table.add_row("-", "-", "No tunnels", "-", "-", "-")
                 
         except Exception as e:
             self.app.notify(f"Failed to load tunnels: {str(e)}", severity="error")
-            table.add_row("-", "Error loading", "-", "-", "-")
+            table.add_row("-", "-", "Error loading", "-", "-", "-")
     
     @on(Button.Pressed, "#new")
     async def handle_new_tunnel(self, event: Button.Pressed) -> None:
@@ -261,6 +280,7 @@ class DashboardScreen(Screen):
     @on(Button.Pressed, "#refresh")
     async def handle_refresh(self, event: Button.Pressed) -> None:
         """Handle refresh button"""
+        await self.load_quota_info()
         await self.load_tunnels()
         self.app.notify("Tunnels refreshed", severity="success")
     
@@ -298,6 +318,11 @@ class CreateTunnelScreen(Screen):
         Binding("enter", "submit", "Create"),
     ]
     
+    def __init__(self):
+        super().__init__()
+        self.can_use_custom_domain = True
+        self.quota_info = None
+    
     def compose(self) -> ComposeResult:
         yield Header()
         yield Container(
@@ -307,13 +332,14 @@ class CreateTunnelScreen(Screen):
                 Label("Local Port:"),
                 Input(placeholder="3000", id="local_port", value="3000"),
                 Static(""),
-                Label("Subdomain:"),
+                Label("Subdomain:", id="subdomain-label"),
                 RadioSet(
                     RadioButton("Random", id="random", value=True),
                     RadioButton("Custom", id="custom"),
                     id="subdomain_type"
                 ),
                 Input(placeholder="my-app", id="subdomain", disabled=True),
+                Static("", id="quota-warning", classes="warning"),
                 Static(""),
                 Horizontal(
                     Button("[Enter] Create", variant="primary", id="create"),
@@ -327,6 +353,25 @@ class CreateTunnelScreen(Screen):
         )
         yield Footer()
     
+    async def on_mount(self) -> None:
+        """When screen is mounted, check quota"""
+        try:
+            self.quota_info = await self.app.api_client.get_quota_info()
+            self.can_use_custom_domain = self.quota_info.get('can_use_custom_domain', True)
+            
+            if not self.can_use_custom_domain:
+                # Disable custom option and show warning
+                custom_radio = self.query_one("#custom", RadioButton)
+                custom_radio.disabled = True
+                
+                quota_warning = self.query_one("#quota-warning", Static)
+                used = self.quota_info.get('custom_domains_used', 0)
+                limit = self.quota_info.get('custom_domains_limit', 0)
+                quota_warning.update(f"⚠️ Custom domain quota exhausted ({used}/{limit}). Random subdomain will be assigned.")
+        except Exception:
+            # Silent fail if quota endpoint not available
+            pass
+    
     @on(RadioButton.Changed)
     def handle_radio_change(self, event: RadioButton.Changed) -> None:
         """Handle radio button change"""
@@ -334,7 +379,7 @@ class CreateTunnelScreen(Screen):
         if event.radio_button.id == "random":
             subdomain_input.disabled = True
             subdomain_input.value = ""
-        else:
+        elif event.radio_button.id == "custom" and self.can_use_custom_domain:
             subdomain_input.disabled = False
     
     @on(Button.Pressed, "#create")

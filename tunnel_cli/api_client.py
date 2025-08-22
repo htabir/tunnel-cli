@@ -108,6 +108,25 @@ class APIClient:
         ) as response:
             return response.status == 200
     
+    async def get_quota_info(self) -> Dict[str, Any]:
+        """Get quota information"""
+        headers = {"X-API-Key": self.api_key} if self.api_key else {}
+        async with self.session.get(
+            f"{self.api_url}/tunnels/quota/info",
+            headers=headers
+        ) as response:
+            if response.status == 200:
+                return await response.json()
+            else:
+                return {
+                    "tunnels_limit": 0,
+                    "tunnels_used": 0,
+                    "custom_domains_limit": 0,
+                    "custom_domains_used": 0,
+                    "can_create_tunnel": False,
+                    "can_use_custom_domain": False
+                }
+    
     async def get_tunnel_config(self, tunnel_id: str, local_port: int) -> Dict[str, Any]:
         """Get tunnel configuration for FRP"""
         headers = {"X-API-Key": self.api_key} if self.api_key else {}
