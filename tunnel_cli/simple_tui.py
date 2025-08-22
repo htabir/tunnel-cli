@@ -314,6 +314,7 @@ class DashboardScreen(Screen):
                 yield Static(f"[bold]User:[/bold] {self.app.config.username}")
                 yield Static(f"[bold]Server:[/bold] tunnel.ovream.com")
                 yield Static(f"[bold]Status:[/bold] [green]Connected[/green]")
+                yield Static("", id="quota-info")
                 yield Static("─" * 50, classes="dim")
             
             # Tunnels table
@@ -325,11 +326,37 @@ class DashboardScreen(Screen):
     
     async def on_mount(self) -> None:
         """Load tunnels when screen mounts"""
+        await self.load_quota_info()
         await self.load_tunnels()
         # Auto-connect tunnels with local ports
         await self.auto_connect_tunnels()
         # Start periodic status sync
         self.set_interval(30, self.periodic_sync)  # Sync every 30 seconds
+    
+    async def load_quota_info(self) -> None:
+        """Load and display quota information"""
+        try:
+            quota = await self.app.api_client.get_quota_info()
+            quota_text = self.query_one("#quota-info", Static)
+            
+            # Format tunnel quota
+            max_tunnels = quota.get('max_tunnels', 0)
+            if max_tunnels == -1:
+                tunnels_info = f"[bold]Tunnels:[/bold] {quota.get('used_tunnels', 0)}/∞"
+            else:
+                tunnels_info = f"[bold]Tunnels:[/bold] {quota.get('used_tunnels', 0)}/{max_tunnels}"
+            
+            # Format custom domain quota
+            max_custom = quota.get('max_custom_domains', 0)
+            if max_custom == -1:
+                domains_info = f"[bold]Custom Domains:[/bold] {quota.get('used_custom_domains', 0)}/∞"
+            else:
+                domains_info = f"[bold]Custom Domains:[/bold] {quota.get('used_custom_domains', 0)}/{max_custom}"
+            
+            quota_text.update(f"[yellow]📊 Quota:[/yellow] {tunnels_info} | {domains_info}")
+        except Exception:
+            # Silent fail if quota endpoint not available
+            pass
     
     async def periodic_sync(self) -> None:
         """Periodic sync of connection status"""
@@ -374,9 +401,14 @@ class DashboardScreen(Screen):
                     else:
                         status_text = Text("○ Manual", style="dim")
                     
+                    # Add domain type indicator
+                    is_custom = tunnel.get("is_custom_subdomain", False)
+                    domain_type = "[C]" if is_custom else "[R]"
+                    subdomain_with_type = f"{domain_type} {tunnel.get('subdomain', '')}"
+                    
                     table.add_row(
                         short_id,
-                        tunnel.get("subdomain", ""),
+                        subdomain_with_type,
                         local_port_str,
                         str(tunnel.get("remote_port", "")),
                         status_text,
@@ -498,7 +530,8 @@ class DashboardScreen(Screen):
         await self.load_tunnels()
     
     async def action_refresh(self) -> None:
-        """Refresh tunnel list"""
+        """Refresh tunnel list and quota"""
+        await self.load_quota_info()
         await self.load_tunnels()
         await self.auto_connect_tunnels()
         await self.sync_connection_status()
@@ -603,14 +636,16 @@ class CreateTunnelScreen(Screen):
                     )
                     yield Static("")
                     
-                    yield Label("Subdomain (optional):")
+                    yield Label("Subdomain (optional):", id="subdomain-label")
                     yield Input(
                         placeholder="eighty",
                         id="subdomain"
                     )
                     yield Static(
-                        "[dim]Leave empty for a random subdomain[/dim]"
+                        "[dim]Leave empty for a random subdomain[/dim]",
+                        id="subdomain-help"
                     )
+                    yield Static("", id="quota-warning")
                     yield Static(
                         "[blue]<random>.tunnel.ovream.com[/blue]",
                         id="tunnel-url"
@@ -628,10 +663,33 @@ class CreateTunnelScreen(Screen):
         
         yield Footer()
     
-    def on_mount(self) -> None:
-        """Setup event handlers when screen mounts"""
+    async def on_mount(self) -> None:
+        """Setup event handlers when screen mounts and check quota"""
         subdomain_input = self.query_one("#subdomain", Input)
         subdomain_input.on_change = self.update_tunnel_url
+        
+        # Check quota for custom domains
+        try:
+            quota = await self.app.api_client.get_quota_info()
+            can_use_custom = quota.get('can_use_custom_domain', True)
+            
+            if not can_use_custom:
+                # Disable custom subdomain input
+                subdomain_input.disabled = True
+                subdomain_input.placeholder = "Quota exhausted"
+                
+                # Show warning
+                quota_warning = self.query_one("#quota-warning", Static)
+                used = quota.get('used_custom_domains', 0)
+                limit = quota.get('max_custom_domains', 0)
+                quota_warning.update(f"[bold red]⚠️ Custom domain quota exhausted ({used}/{limit})[/bold red]")
+                
+                # Update help text
+                help_text = self.query_one("#subdomain-help", Static)
+                help_text.update("[dim]Random subdomain will be assigned[/dim]")
+        except Exception:
+            # Silent fail if quota endpoint not available
+            pass
     
     def update_tunnel_url(self) -> None:
         """Update the tunnel URL display based on subdomain input"""
