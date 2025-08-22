@@ -204,8 +204,19 @@ class DashboardScreen(Screen):
             quota = await self.app.api_client.get_quota_info()
             quota_text = self.query_one("#quota-info", Static)
             
-            tunnels_info = f"Tunnels: {quota.get('tunnels_used', 0)}/{quota.get('tunnels_limit', '∞')}"
-            domains_info = f"Custom Domains: {quota.get('custom_domains_used', 0)}/{quota.get('custom_domains_limit', 0)}"
+            # Format tunnel quota
+            max_tunnels = quota.get('max_tunnels', 0)
+            if max_tunnels == -1:
+                tunnels_info = f"Tunnels: {quota.get('used_tunnels', 0)}/∞"
+            else:
+                tunnels_info = f"Tunnels: {quota.get('used_tunnels', 0)}/{max_tunnels}"
+            
+            # Format custom domain quota
+            max_custom = quota.get('max_custom_domains', 0)
+            if max_custom == -1:
+                domains_info = f"Custom Domains: {quota.get('used_custom_domains', 0)}/∞"
+            else:
+                domains_info = f"Custom Domains: {quota.get('used_custom_domains', 0)}/{max_custom}"
             
             quota_text.update(f"📊 Quota: {tunnels_info} | {domains_info}")
         except Exception:
