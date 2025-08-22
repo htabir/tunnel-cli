@@ -25,6 +25,7 @@ class TunnelCLI:
         self.config = self.load_config()
         self.api_key = self.config.get("api_key")
         self.api_url = self.config.get("api_url", API_BASE_URL)
+        self.user_info = None
     
     def load_config(self) -> Dict[str, Any]:
         """Load configuration from file"""
@@ -75,6 +76,18 @@ class TunnelCLI:
         tokens = response.json()
         access_token = tokens["access_token"]
         
+        # Get user profile to know their role
+        profile_response = requests.get(
+            f"{self.api_url}/users/me",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        
+        if profile_response.status_code == 200:
+            user_data = profile_response.json()
+            user_role = user_data.get("role", "user")
+        else:
+            user_role = "user"
+        
         # Create API key
         response = requests.post(
             f"{self.api_url}/api-keys/",
@@ -93,9 +106,10 @@ class TunnelCLI:
         self.config["api_key"] = api_key
         self.config["api_url"] = self.api_url
         self.config["username"] = username
+        self.config["user_role"] = user_role
         self.save_config(self.config)
         
-        print(f"✓ Logged in as {username}")
+        print(f"✓ Logged in as {username} ({user_role})")
         print(f"✓ API key saved to {CONFIG_FILE}")
         
         self.api_key = api_key
@@ -136,8 +150,44 @@ class TunnelCLI:
             tablefmt="grid"
         ))
     
+    def get_user_profile(self):
+        """Get current user profile to check role"""
+        if self.user_info:
+            return self.user_info
+            
+        response = self.request("GET", "/users/me")
+        if response.status_code == 200:
+            self.user_info = response.json()
+            return self.user_info
+        return None
+    
     def create_tunnel(self, subdomain: Optional[str] = None, local_port: int = 3000):
         """Create a new tunnel"""
+        # Check subdomain length based on user role
+        if subdomain:
+            # Get user role from config or API
+            user_role = self.config.get("user_role")
+            if not user_role:
+                profile = self.get_user_profile()
+                user_role = profile.get("role", "user") if profile else "user"
+                # Cache the role
+                self.config["user_role"] = user_role
+                self.save_config(self.config)
+            
+            # Validate subdomain length based on role
+            min_length = 1 if user_role == "admin" else 5
+            if len(subdomain) < min_length:
+                print(f"Error: Subdomain must be at least {min_length} character{'s' if min_length > 1 else ''} long")
+                if user_role != "admin":
+                    print("Regular users must use subdomains with 5 or more characters")
+                sys.exit(1)
+            
+            # Validate subdomain format
+            import re
+            if not re.match(r'^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$', subdomain):
+                print("Error: Invalid subdomain format. Use only lowercase letters, numbers, and hyphens")
+                sys.exit(1)
+        
         data = {"local_port": local_port}
         if subdomain:
             data["subdomain"] = subdomain
