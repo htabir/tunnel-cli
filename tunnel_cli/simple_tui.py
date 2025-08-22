@@ -800,6 +800,11 @@ class CreateTunnelScreen(Screen):
         """Keyboard shortcut for cancel"""
         self.app.pop_screen()
     
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        """Handle Enter key in input fields"""
+        if event.input.id in ["port", "subdomain"]:
+            await self.handle_create(None)
+    
     async def on_key(self, event) -> None:
         """Handle key presses"""
         if event.key == "enter":
